@@ -1,24 +1,45 @@
-# Standard Properties
+# Property Classification
 
-This document defines the standard metadata properties used by Ohtli.
+Metadata properties are divided into two categories.
 
-| Property  | Required | Description                                |
-| --------- | -------- | ------------------------------------------ |
-| `title`   | Yes      | Human-readable document title.             |
-| `type`    | Yes      | Domain entity represented by the document. |
-| `status`  | No       | Current lifecycle state.                   |
-| `created` | Yes      | Creation date (ISO 8601).                  |
-| `updated` | Yes      | Last modification date (ISO 8601).         |
-| `tags`    | No       | Classification keywords.                   |
-| `aliases` | No       | Alternative names.                         |
-| `parent`  | No       | Parent entity.                             |
-| `related` | No       | Related documents.                         |
-| `owner`   | No       | Responsible person or team.                |
+## Core Properties
 
-## Design Principles
+Core Properties are common to every entity in the Ohtli framework.
 
-* Every property has a single responsibility.
-* Properties must have consistent meaning across all document types.
-* Prefer reusable properties over entity-specific ones.
-* New properties should be introduced only when they provide value across multiple entities.
-* Metadata should remain stable over time.
+These properties should be present in all templates.
+
+| Property  | Description                           |
+| --------- | ------------------------------------- |
+| `title`   | Human-readable title of the document. |
+| `type`    | Entity type.                          |
+| `created` | Creation timestamp.                   |
+| `updated` | Last modification timestamp.          |
+| `tags`    | Classification tags.                  |
+
+Example:
+
+```yaml
+---
+title:
+type:
+created:
+updated:
+tags: []
+---
+```
+
+## Entity-specific Properties
+
+Entity-specific properties are used only when they provide meaningful information for a particular entity.
+
+These properties are optional and should not be included in every template by default.
+
+| Property  | Typical Usage         |
+| --------- | --------------------- |
+| `status`  | Projects, Reviews     |
+| `aliases` | Knowledge             |
+| `parent`  | Hierarchical entities |
+| `related` | Cross references      |
+| `owner`   | Shared workspaces     |
+
+The goal is to keep templates simple while maintaining a consistent metadata model throughout the framework.
