@@ -1,17 +1,41 @@
-# Templates
+# Reference Templates
 
-## Purpose
+This directory contains the canonical templates of the Ohtli framework.
 
-Store reusable document templates.
+These templates implement the concepts defined in the Core Specification and are intended to be reused by all future implementations.
 
-## Contains
+## Design Principles
 
-* Standard templates
-* Shared document structures
+* Tool-independent
+* Markdown-first
+* Minimal by default
+* Human-readable
+* Consistent structure
+* Reusable across implementations
 
-## Does Not Contain
+## Metadata
 
-* Active documents
-* Project content
+All templates use YAML Front Matter.
 
-Templates ensure consistency throughout the workspace.
+Each template includes:
+
+* Core Properties
+* Entity-specific Properties when applicable
+
+The metadata structure follows the Metadata Specification.
+
+## Content
+
+Templates define structure only.
+
+They do not include:
+
+* Example projects
+* Sample data
+* Tool-specific syntax
+* Automation
+* Plugins
+
+## Implementations
+
+Future implementations should reuse these templates whenever possible instead of creating alternative versions.
