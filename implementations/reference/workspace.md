@@ -2,7 +2,7 @@
 
 The workspace is the operational environment of Ohtli.
 
-Each directory has a single responsibility.
+Each directory has a single responsibility and represents a distinct domain within the framework.
 
 ## Inbox
 
@@ -40,5 +40,4 @@ Supporting files such as images, PDFs, or datasets.
 
 Inactive material retained for historical purposes.
 
-The workspace is intentionally simple and relies on the filesystem rather than tool-specific features.
-
+The workspace is intentionally simple, tool-independent, and relies on the filesystem rather than platform-specific features.
