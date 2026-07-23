@@ -1,5 +1,5 @@
 # Knowledge
 
-Knowledge contains reusable reference information intended for future use.
+Knowledge contains reference material intended for future use.
 
-Knowledge notes are independent from projects and areas whenever possible.
+These notes are generally stable, reusable, and independent from active projects.nowledge notes are independent from projects and areas whenever possible.

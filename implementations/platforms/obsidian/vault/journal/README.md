@@ -1,5 +1,5 @@
 # Journal
 
-The Journal stores chronological records of work, decisions, and observations.
+The Journal stores chronological records of work, observations, and daily activity.
 
-Journal entries document progress over time.
+Journal entries capture events as they occur and provide historical context.

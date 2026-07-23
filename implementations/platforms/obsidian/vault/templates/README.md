@@ -1,5 +1,7 @@
 # Templates
 
-Templates provide reusable document structures for the entities defined by the Ohtli framework.
+This directory stores reusable note templates available within the Vault.
 
-Templates help maintain consistency across the workspace.
+Templates standardize note creation and improve consistency across the workspace.
+
+Platform-specific template implementations are maintained separately by the Obsidian platform.

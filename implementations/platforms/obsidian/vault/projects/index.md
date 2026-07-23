@@ -1,9 +1,6 @@
 # Projects
 
-This index provides an overview of all projects.
+This page lists the active projects contained in the Vault.
 
-## Active Projects
+Projects represent actionable work with a clear objective.
 
-## On Hold
-
-## Completed Projects

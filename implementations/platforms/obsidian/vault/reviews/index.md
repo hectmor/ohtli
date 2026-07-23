@@ -1,11 +1,5 @@
 # Reviews
 
-This index provides access to periodic reviews.
+This page provides access to periodic workspace reviews.
 
-## Weekly Reviews
-
-## Monthly Reviews
-
-## Quarterly Reviews
-
-## Annual Reviews
+Reviews may be daily, weekly, monthly, quarterly, or yearly.

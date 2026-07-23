@@ -1,5 +1,13 @@
 # Attachments
 
-Attachments store supporting files referenced by Markdown documents.
+Attachments contain supporting files referenced by notes.
 
-Examples include images, PDFs, spreadsheets, and datasets.
+Typical attachments include:
+
+- Images
+- PDFs
+- Documents
+- Diagrams
+- Other binary assets
+
+Attachments should support notes rather than replace them.

@@ -1,5 +1,11 @@
 # Archive
 
-The Archive stores inactive or completed material retained for historical purposes.
+The Archive stores inactive material retained for historical reference.
 
-Archived content remains available for reference but is no longer part of the active workspace.
+Archived content is preserved but is no longer considered active.
+
+Examples include:
+
+- Completed projects
+- Deprecated notes
+- Historical records
