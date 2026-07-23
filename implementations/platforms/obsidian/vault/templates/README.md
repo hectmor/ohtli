@@ -1,7 +1,9 @@
-# Templates
+## Purpose
 
-This directory stores reusable note templates available within the Vault.
+This directory stores reusable note templates.
 
-Templates standardize note creation and improve consistency across the workspace.
+Platform-specific implementations may generate these templates automatically.
 
-Platform-specific template implementations are maintained separately by the Obsidian platform.
+The conceptual templates belong to the Vault.
+
+The implementation belongs to the platform.

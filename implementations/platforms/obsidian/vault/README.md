@@ -21,3 +21,7 @@ Platform-specific behavior, such as plugins, themes, templates, and application 
 * Archive
 
 Each directory has a single responsibility, ensuring the workspace remains simple, predictable, and easy to maintain.
+
+## Getting Started
+
+If this is your first time using the Vault, read [Workflow](workflow.md) before creating your first note.

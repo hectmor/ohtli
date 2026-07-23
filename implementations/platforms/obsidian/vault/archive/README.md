@@ -1,6 +1,9 @@
 # Archive
+Archive is not trash.
 
-The Archive stores inactive material retained for historical reference.
+Archived information remains valuable but is no longer active.
+
+The Archive preserves historical context while keeping the active workspace clean.
 
 Archived content is preserved but is no longer considered active.
 

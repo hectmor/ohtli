@@ -1,13 +1,7 @@
 # Attachments
 
-Attachments contain supporting files referenced by notes.
+Attachments should never become a file repository.
 
-Typical attachments include:
+Every attachment should be referenced by at least one note.
 
-- Images
-- PDFs
-- Documents
-- Diagrams
-- Other binary assets
-
-Attachments should support notes rather than replace them.
+Unused attachments should be removed periodically.
