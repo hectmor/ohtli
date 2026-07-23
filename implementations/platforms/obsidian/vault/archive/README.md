@@ -1,5 +1,14 @@
 # Archive
+Archive is not trash.
 
-The Archive stores inactive or completed material retained for historical purposes.
+Archived information remains valuable but is no longer active.
 
-Archived content remains available for reference but is no longer part of the active workspace.
+The Archive preserves historical context while keeping the active workspace clean.
+
+Archived content is preserved but is no longer considered active.
+
+Examples include:
+
+- Completed projects
+- Deprecated notes
+- Historical records

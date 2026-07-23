@@ -1,5 +1,7 @@
 # Attachments
 
-Attachments store supporting files referenced by Markdown documents.
+Attachments should never become a file repository.
 
-Examples include images, PDFs, spreadsheets, and datasets.
+Every attachment should be referenced by at least one note.
+
+Unused attachments should be removed periodically.

@@ -1,5 +1,9 @@
-# Templates
+## Purpose
 
-Templates provide reusable document structures for the entities defined by the Ohtli framework.
+This directory stores reusable note templates.
 
-Templates help maintain consistency across the workspace.
+Platform-specific implementations may generate these templates automatically.
+
+The conceptual templates belong to the Vault.
+
+The implementation belongs to the platform.

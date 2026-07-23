@@ -1,7 +1,5 @@
 # Journal
 
-This index provides chronological access to journal entries.
+This page provides access to chronological records stored in the Vault.
 
-## Current Year
-
-## Previous Years
+Journal notes are organized by date.

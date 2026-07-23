@@ -1,9 +1,5 @@
 # Knowledge
 
-This index provides an overview of the knowledge base.
+This page serves as the entry point for the knowledge base.
 
-## Categories
-
-## Recent Notes
-
-## References
+Knowledge notes capture concepts, references, documentation, and reusable information.
