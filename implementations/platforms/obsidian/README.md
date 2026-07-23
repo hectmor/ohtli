@@ -1,11 +1,16 @@
-# Reference Vault
+# Obsidian Platform
 
-The Reference Vault is the canonical Obsidian workspace for the Ohtli framework.
+This directory contains the official Obsidian implementation of the Ohtli framework.
 
-It implements the workspace defined by the Ohtli Specification while adapting it to the Obsidian ecosystem.
+The implementation provides a complete Obsidian experience while remaining fully compatible with the Ohtli Specification and the Reference Implementation.
 
-The vault is intended to serve as the official starting point for new users and as the foundation for future Obsidian-specific features.
+Its responsibilities include:
 
-Users may use this vault directly or copy its contents into an existing Obsidian vault.
+* Providing the official Reference Vault.
+* Configuring Obsidian.
+* Defining platform templates.
+* Documenting supported plugins.
+* Providing themes and visual customization.
+* Supplying examples specific to the Obsidian platform.
 
-The Reference Vault remains fully Markdown-based and portable outside Obsidian.
+The implementation does not redefine the framework. It only adapts it to Obsidian.
