@@ -1,62 +1,42 @@
-# Obsidian Implementation
+# Implementations
 
-The Obsidian Implementation is the official implementation of the Ohtli framework for Obsidian.
+This directory contains the official implementations of the Ohtli framework.
 
-It adapts the Ohtli Specification and the Reference Implementation to the Obsidian ecosystem while preserving the framework's core principles.
+The project is organized into two categories of implementations:
 
-## Objectives
-
-* Provide an official Obsidian vault.
-* Support the complete Ohtli workflow.
-* Remain compatible with the Reference Implementation.
-* Minimize platform-specific behavior.
-* Keep Markdown files portable.
+* **Reference Implementation** — the canonical implementation of the Ohtli Specification, independent of any software platform.
+* **Platform Implementations** — implementations that adapt the Ohtli framework to specific applications while preserving the concepts and behavior defined by the specification.
 
 ## Structure
 
 ```text
-reference-vault/
-templates/
-plugins/
-settings/
-snippets/
-examples/
+implementations/
+├── reference/
+└── platforms/
 ```
 
-### Reference Vault
+## Reference Implementation
 
-The `reference-vault/` directory contains the canonical Obsidian vault distributed with Ohtli.
+The Reference Implementation defines the canonical workspace structure and serves as the baseline for every platform implementation.
 
-Users may use this vault directly or create their own vault in any location and copy the required files.
+It is platform-independent and should not contain configuration or features specific to any application.
 
-### Templates
+## Platform Implementations
 
-Contains Obsidian-specific document templates.
+Platform implementations provide an official adaptation of Ohtli for a specific platform.
 
-### Plugins
+A platform implementation may include:
 
-Contains documentation and configuration for the recommended Obsidian plugins.
+* Reference Vault or workspace
+* Platform configuration
+* Templates
+* Plugins or extensions
+* Themes
+* Documentation
+* Examples
 
-### Settings
+Each implementation must remain compatible with the Ohtli Specification and the Reference Implementation.
 
-Contains shared workspace settings.
+## Current Platforms
 
-### Snippets
-
-Contains optional CSS snippets.
-
-### Examples
-
-Contains examples specific to the Obsidian implementation.
-
-## Design Principles
-
-The Obsidian Implementation follows the same principles as the Reference Implementation.
-
-* Tool-independent specification
-* Markdown-first
-* Human-readable
-* Portable
-* Extensible
-
-Platform-specific features are optional enhancements and must not become requirements of the framework.
+* Obsidian
