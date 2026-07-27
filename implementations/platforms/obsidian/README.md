@@ -1,16 +1,34 @@
 # Obsidian Platform
 
-This directory contains the official Obsidian implementation of the Ohtli framework.
+This directory contains the reference implementation of Ohtli for Obsidian.
 
-The implementation provides a complete Obsidian experience while remaining fully compatible with the Ohtli Specification and the Reference Implementation.
+The implementation is divided into two independent responsibilities.
 
-Its responsibilities include:
+- **Vault** defines the organization of information.
+- **Platform** defines how Obsidian behaves.
 
-* Providing the official Reference Vault.
-* Configuring Obsidian.
-* Defining platform templates.
-* Documenting supported plugins.
-* Providing themes and visual customization.
-* Supplying examples specific to the Obsidian platform.
+The platform intentionally versions only shared configuration.
 
-The implementation does not redefine the framework. It only adapts it to Obsidian.
+User preferences remain outside version control.
+
+## Structure
+
+```
+obsidian/
+├── README.md
+├── configuration.md
+└── vault/
+```
+
+## Principles
+
+- Reproducible
+- Portable
+- Minimal
+- Opinionated where collaboration benefits
+- Flexible where personal workflows differ
+
+## Related Documentation
+
+- `configuration.md`
+- `vault/README.md`
