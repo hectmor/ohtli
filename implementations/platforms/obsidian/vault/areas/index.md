@@ -1,7 +1,28 @@
 # Areas
 
-This index provides an overview of all active areas of responsibility.
+## Purpose
 
-## Active Areas
+Areas represent long-term responsibilities that require continuous maintenance.
 
-## Archived Areas
+---
+
+## Navigation
+
+- [[workspace]]
+- [[../projects/index]]
+- [[../knowledge/index]]
+- [[../journal/index]]
+- [[../reviews/index]]
+
+---
+
+## Contents
+
+Create and manage area notes in this directory.
+
+---
+
+## Related
+
+- [[../projects/index]]
+- [[../reviews/index]]
