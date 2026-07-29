@@ -1,9 +1,7 @@
-## Purpose
+# Templates
 
-This directory stores reusable note templates.
+This directory contains the canonical templates used by the Obsidian implementation.
 
-Platform-specific implementations may generate these templates automatically.
+These templates are the source from which the Vault templates are generated or maintained.
 
-The conceptual templates belong to the Vault.
-
-The implementation belongs to the platform.
+Changes here should preserve compatibility with the Ohtli Specification.
