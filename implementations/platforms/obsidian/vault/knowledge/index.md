@@ -1,5 +1,28 @@
 # Knowledge
 
-This page serves as the entry point for the knowledge base.
+## Purpose
 
-Knowledge notes capture concepts, references, documentation, and reusable information.
+Knowledge stores reusable information, references, and learning resources.
+
+---
+
+## Navigation
+
+- [[workspace]]
+- [[../projects/index]]
+- [[../areas/index]]
+- [[../journal/index]]
+- [[../reviews/index]]
+
+---
+
+## Contents
+
+Create and organize knowledge notes in this directory.
+
+---
+
+## Related
+
+- [[../projects/index]]
+- [[../areas/index]]
