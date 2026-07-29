@@ -1,21 +1,22 @@
-Properties
+---
+note_type: reference
+created: <% tp.date.now("YYYY-MM-DD") %>
+updated: <% tp.date.now("YYYY-MM-DD") %>
+tags:
+aliases:
+author:
+source:
+url:
+---
 
-↓
-
-# Title
-
-↓
+# <% tp.file.title %>
 
 ## Citation
 
-↓
-
 ## Summary
 
-↓
-
-## Links
-
-↓
+## Key Points
 
 ## Notes
+
+## Links
