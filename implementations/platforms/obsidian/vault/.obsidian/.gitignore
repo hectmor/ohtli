@@ -1,0 +1,14 @@
+# Personal workspace
+
+workspace.json
+workspace-mobile.json
+
+# Personal preferences
+
+hotkeys.json
+bookmarks.json
+
+# Cache
+
+workspace
+cache
