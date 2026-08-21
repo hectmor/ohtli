@@ -31,6 +31,12 @@ Detailed contracts:
 - [Automation Foundations](automation-foundations.md)
 - [Automation Triggers and Conditions](automation-triggers-and-conditions.md)
 
+Illustrative, non-normative material:
+
+- [Integration Points](integration-points.md) — relocated from the
+  superseded `docs/automation/` scaffolding; carries no architectural
+  authority.
+
 ## Core Model
 
 ```text

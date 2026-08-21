@@ -1,5 +1,21 @@
 # Integration Points
 
+## Status
+
+Illustrative, non-normative.
+
+This document lists illustrative future implementation touchpoints. It is
+not part of the Automation Model's architectural contract and does not
+carry conceptual authority.
+
+```text
+docs/architecture/automation-model/README.md
+```
+
+remains the canonical entry point and sole conceptual authority for the
+Automation Model. Nothing below introduces architecture, technology
+requirements, or implementation decisions.
+
 Automation may interact with the following parts of Ohtli.
 
 ## Templates
