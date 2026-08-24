@@ -14,7 +14,7 @@ A non-Markdown resource associated with another entity.
 
 ## Automation
 
-A process that assists users by reducing repetitive work while preserving the framework's principles.
+A mechanism that may initiate a Workflow Execution automatically, without requiring a manual alternative. See the [Automation Model](../architecture/automation-model/README.md).
 
 ---
 
@@ -32,19 +32,23 @@ The conceptual representation of the entities managed by Ohtli and the relations
 
 ## Entity
 
-A core concept within the Ohtli domain.
+Historical term for what the canonical architecture calls a Domain
+Object. See the [Domain Model](../architecture/domain-model/README.md).
 
 ---
 
 ## Filesystem
 
-The physical organization of information on disk.
+The physical organization of information on disk. See the
+[Filesystem Model](../architecture/filesystem-model/README.md).
 
 ---
 
 ## Inbox
 
-The entry point for unprocessed information.
+Historical term from early ("M1") documentation for an unprocessed-item
+holding area. It is not a Domain Object in the canonical
+[Domain Model](../architecture/domain-model/README.md).
 
 ---
 
@@ -62,7 +66,8 @@ Reusable information intended to support understanding or execution.
 
 ## Metadata
 
-Structured information describing a document.
+Structured information describing a document. See the
+[Metadata Model](../architecture/metadata-model/README.md).
 
 ---
 
@@ -74,7 +79,9 @@ A temporary effort undertaken to achieve a specific outcome.
 
 ## Review
 
-A structured evaluation of work, responsibilities, or the framework itself.
+An evaluative transformation belonging to the
+[Workflow Model](../architecture/workflow-model/README.md), not a Domain
+Object.
 
 ---
 

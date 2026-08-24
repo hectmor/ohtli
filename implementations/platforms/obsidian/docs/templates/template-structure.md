@@ -4,8 +4,8 @@ This document defines the canonical structure for every template used by the
 Ohtli Obsidian platform.
 
 Templates implement the metadata model defined in
-`docs/metadata/` and provide a consistent authoring experience across all
-note types.
+`docs/architecture/metadata-model/` and provide a consistent authoring
+experience across all note types.
 
 ---
 

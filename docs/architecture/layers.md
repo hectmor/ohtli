@@ -15,6 +15,10 @@ each layer preserves its own architectural responsibility.
 
 Defines how information is physically organized.
 
+The canonical definitions belong to:
+
+- `filesystem-model/`
+
 Responsibilities:
 
 - Directory structure
@@ -26,6 +30,10 @@ Responsibilities:
 ## Layer 2 — Metadata
 
 Provides structured information about documents.
+
+The canonical definitions belong to:
+
+- `metadata-model/`
 
 Responsibilities:
 
@@ -68,8 +76,15 @@ The canonical definitions belong to:
 
 - `event-model/`
 - `workflow-model/`
+- `representation-model/`
+- `execution-model/`
 
 The Event Model preserves historical evidence of observable change.
+
+The Representation Model defines how canonical semantics are represented
+independent of implementation technology.
+
+The Execution Model defines what it means for a Workflow to happen.
 
 The Workflow Model defines six transformation classes:
 
@@ -92,6 +107,10 @@ This layer does not prescribe a universal workflow sequence.
 
 Defines how information is presented without changing its source.
 
+The canonical definitions belong to:
+
+- `user-experience/`
+
 Examples:
 
 - Dashboards
@@ -107,6 +126,10 @@ information they present.
 ## Layer 6 — Automation
 
 Implements or assists repetitive and operational processes.
+
+The canonical definitions belong to:
+
+- `automation-model/`
 
 Examples:
 
