@@ -40,3 +40,9 @@ The Inbox should never become long-term storage.
 - Idea for a new project
 - Meeting notes
 - Book recommendation
+
+## Architectural Note
+
+This folder is an implementation-level staging area for the Workflow
+Model's Capture transformation. It is not a Domain Object. See
+[Implementation Boundaries](../../../../../docs/architecture/implementation/README.md).
