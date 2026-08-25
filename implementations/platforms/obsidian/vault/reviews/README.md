@@ -22,3 +22,9 @@ Regular reviews ensure information remains organized and actionable.
 - Update Areas
 - Create new tasks
 - Capture improvements
+
+## Architectural Note
+
+This folder stores outputs of the Workflow Model's Review
+transformation. It is not a Domain Object. See
+[Implementation Boundaries](../../../../../docs/architecture/implementation/README.md).
