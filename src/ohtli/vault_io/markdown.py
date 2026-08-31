@@ -10,6 +10,8 @@ from ohtli.vault_io import paths as paths
 
 _TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
+_RESERVED_INBOX_FILENAMES = {"README.md", "index.md"}
+
 
 def write_project(representation: dict[str, Any], *, base_dir: Path | None = None) -> Path:
     path = paths.project_file_path(representation["title"], base_dir=base_dir)
@@ -50,3 +52,36 @@ def list_existing_titles(*, base_dir: Path | None = None) -> set[str]:
             continue
         titles.add(read_project(md_file)["title"])
     return titles
+
+
+def list_inbox_entries(*, base_dir: Path | None = None) -> list[Path]:
+    """The raw, unprocessed Inbox entries.
+
+    Inbox entries carry no frontmatter by design (`Inbox Entry != Domain
+    Object`), so unlike `list_existing_titles` they cannot be told apart
+    from navigation notes by content. Reserved navigation filenames are
+    excluded by name instead.
+    """
+    directory = base_dir if base_dir is not None else paths.INBOX_DIR
+    if not directory.exists():
+        return []
+
+    return sorted(
+        md_file
+        for md_file in directory.glob("*.md")
+        if md_file.name not in _RESERVED_INBOX_FILENAMES
+    )
+
+
+def read_inbox_entry(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def resolve_inbox_entry(path: Path) -> None:
+    """Resolve a processed Inbox entry by removing it.
+
+    Removing the file is an implementation detail of the Filesystem
+    Model, not a Domain decision (`Directory structure != Domain
+    semantics`) — the entry never had identity to begin with.
+    """
+    path.unlink()

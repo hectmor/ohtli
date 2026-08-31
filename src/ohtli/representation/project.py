@@ -16,17 +16,25 @@ BODY_TEMPLATE = """# {title}
 ## Tasks
 
 ## Notes
-
+{notes}
 ## References
 """
 
 
-def to_representation(project: Project, *, today: date | None = None) -> dict[str, Any]:
+def to_representation(
+    project: Project, *, today: date | None = None, notes: str | None = None
+) -> dict[str, Any]:
     """Build the Current Representation for a Project.
 
     Property order and section structure follow
     implementations/platforms/obsidian/docs/templates/template-structure.md
     and implementations/platforms/obsidian/docs/metadata/project.md.
+
+    `notes` is optional free-form content for the `## Notes` section,
+    used when a Project originates from an Inbox entry that already
+    carried a body. It is a Representation concern, not Domain
+    semantics: the `Project` Domain Object stays identity + title only.
+    Omitting it reproduces the blank template exactly.
     """
     today = today or date.today()
     return {
@@ -40,7 +48,9 @@ def to_representation(project: Project, *, today: date | None = None) -> dict[st
             "status": "planned",
         },
         "title": project.title,
-        "body": BODY_TEMPLATE.format(title=project.title),
+        "body": BODY_TEMPLATE.format(
+            title=project.title, notes=f"\n{notes}\n" if notes else ""
+        ),
     }
 
 
