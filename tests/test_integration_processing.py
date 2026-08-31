@@ -80,6 +80,25 @@ def test_title_only_entry_produces_a_blank_template_body(tmp_path):
     assert "## Notes\n\n## References" in read_project(result.path)["body"]
 
 
+def test_structured_entry_does_not_duplicate_template_sections(tmp_path):
+    """An entry carrying its own `## Objective` must not end up with two
+    `## Objective` headings competing at the same level."""
+    entry_path = tmp_path / "structured.md"
+    entry_path.write_text(
+        "Structured Entry\n\n## Objective\nShip it.\n\n```bash\n# deploy.sh\n```\n",
+        encoding="utf-8",
+    )
+
+    result = execute_processing(
+        ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN), base_dir=tmp_path / "projects"
+    )
+
+    body = read_project(result.path)["body"]
+    assert body.count("\n## Objective\n") == 1, "only the template's own section at level 2"
+    assert "### Objective\nShip it." in body
+    assert "# deploy.sh" in body, "code inside a fence must survive untouched"
+
+
 def test_non_processable_entry_remains_untouched_in_inbox(tmp_path):
     entry_path = tmp_path / "blank-entry.md"
     entry_path.write_text("\n   \n", encoding="utf-8")
