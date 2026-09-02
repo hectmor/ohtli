@@ -6,6 +6,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 PROJECTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "projects"
+INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 
 
 def slugify(title: str) -> str:
