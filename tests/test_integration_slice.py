@@ -8,8 +8,10 @@ call, Deterministic via a plain script-equivalent call) to demonstrate
 actor-neutrality: identical code path, different actor.
 """
 
+from ohtli.domain.area import Area
 from ohtli.execution.execution import Actor, ExecutionRequest, execute_capture
-from ohtli.vault_io.markdown import read_project
+from ohtli.execution.specs import AREA
+from ohtli.vault_io.markdown import read_area, read_project
 
 
 def test_full_slice_human_actor(tmp_path):
@@ -43,3 +45,32 @@ def test_human_and_deterministic_actors_produce_the_same_kind_of_result(tmp_path
 
     assert human_result.applicable == deterministic_result.applicable is True
     assert type(human_result.project) is type(deterministic_result.project)
+
+
+def test_full_slice_for_a_second_domain_object(tmp_path):
+    """The same execute_capture, given spec=AREA, runs the identical
+    Domain -> Workflow -> Execution -> Representation -> Filesystem
+    chain for Area — proving Capture generalizes, not just Project."""
+    request = ExecutionRequest(title="Household", actor=Actor.HUMAN)
+    result = execute_capture(request, spec=AREA, base_dir=tmp_path)
+
+    assert result.applicable
+    assert isinstance(result.project, Area)
+    reloaded = read_area(result.path)
+    assert reloaded["title"] == "Household"
+    assert reloaded["properties"]["id"] == result.project.id
+    assert reloaded["properties"]["status"] == "active"
+
+
+def test_area_and_project_actor_parity(tmp_path):
+    human_result = execute_capture(
+        ExecutionRequest(title="Area Parity A", actor=Actor.HUMAN), spec=AREA, base_dir=tmp_path
+    )
+    deterministic_result = execute_capture(
+        ExecutionRequest(title="Area Parity B", actor=Actor.DETERMINISTIC),
+        spec=AREA,
+        base_dir=tmp_path,
+    )
+
+    assert human_result.applicable == deterministic_result.applicable is True
+    assert type(human_result.project) is type(deterministic_result.project) is Area

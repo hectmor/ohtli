@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from typing import Callable, TypeVar
+
 from ohtli.domain.project import Project
+
+T = TypeVar("T")
 
 
 def _split_entry(raw_text: str) -> tuple[str | None, str | None]:
@@ -48,13 +52,16 @@ def is_applicable(raw_text: str, existing_titles: set[str]) -> bool:
     return title is not None and title not in existing_titles
 
 
-def transform(raw_text: str) -> Project:
+def transform(raw_text: str, domain_factory: Callable[..., T] = Project) -> T:
     """The Processing transformation: interpret an existing Inbox entry
-    as a new Project.
+    as a new Domain Object.
 
     This function does not check applicability and does not persist
     anything, or touch the Inbox entry itself. It is a pure
     transformation, called only after applicability has already been
     confirmed by the caller.
+
+    `domain_factory` defaults to `Project` (Phase 10/11 behavior,
+    unchanged), and generalizes the same way as `capture.transform`.
     """
-    return Project(title=_derive_title(raw_text))
+    return domain_factory(title=_derive_title(raw_text))

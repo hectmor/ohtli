@@ -6,6 +6,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 PROJECTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "projects"
+AREAS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "areas"
 INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 
 
@@ -15,6 +16,14 @@ def slugify(title: str) -> str:
     return slug or "untitled"
 
 
-def project_file_path(title: str, base_dir: Path | None = None) -> Path:
-    base = base_dir if base_dir is not None else PROJECTS_DIR
+def _note_file_path(title: str, default_dir: Path, base_dir: Path | None) -> Path:
+    base = base_dir if base_dir is not None else default_dir
     return base / f"{slugify(title)}.md"
+
+
+def project_file_path(title: str, base_dir: Path | None = None) -> Path:
+    return _note_file_path(title, PROJECTS_DIR, base_dir)
+
+
+def area_file_path(title: str, base_dir: Path | None = None) -> Path:
+    return _note_file_path(title, AREAS_DIR, base_dir)

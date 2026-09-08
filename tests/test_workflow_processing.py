@@ -1,3 +1,4 @@
+from ohtli.domain.area import Area
 from ohtli.workflow import processing
 
 
@@ -48,3 +49,14 @@ def test_derive_notes_is_none_when_entry_has_no_content():
 def test_derive_notes_skips_the_heading_line_it_took_the_title_from():
     raw = "# Heading Title\n\nBody after the heading.\n"
     assert processing.derive_notes(raw) == "Body after the heading."
+
+
+def test_processing_transform_generalizes_to_a_different_domain_object():
+    """Processing is a class of transformation, not a per-object
+    function: the same `transform()` interprets an Inbox entry as an
+    Area exactly as it does a Project, by passing a different
+    domain_factory."""
+    area = processing.transform("New Area\n\nOngoing responsibility.", domain_factory=Area)
+    assert isinstance(area, Area)
+    assert area.title == "New Area"
+    assert area.id
