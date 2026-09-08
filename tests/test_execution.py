@@ -1,3 +1,4 @@
+from ohtli.domain.area import Area
 from ohtli.execution.execution import (
     Actor,
     ExecutionRequest,
@@ -5,6 +6,7 @@ from ohtli.execution.execution import (
     execute_capture,
     execute_processing,
 )
+from ohtli.execution.specs import AREA
 
 
 def test_execution_occurs_when_applicable(tmp_path):
@@ -84,3 +86,44 @@ def test_processing_does_not_occur_when_title_already_exists(tmp_path):
     assert result.project is None
     assert result.path is None
     assert second_entry.exists()
+
+
+def test_capture_executes_for_a_different_domain_object_via_spec(tmp_path):
+    """The same execute_capture generalizes to Area by passing spec=AREA
+    — no duplicate execute_capture_area function."""
+    request = ExecutionRequest(title="Health", actor=Actor.HUMAN)
+    result = execute_capture(request, spec=AREA, base_dir=tmp_path)
+
+    assert result.applicable
+    assert isinstance(result.project, Area)
+    assert result.project.title == "Health"
+    assert result.path is not None
+    assert result.path.exists()
+
+
+def test_processing_executes_for_a_different_domain_object_via_spec(tmp_path):
+    entry_path = tmp_path / "raw-entry.md"
+    entry_path.write_text("New Area From Inbox\n\nOngoing responsibility.\n", encoding="utf-8")
+
+    request = ProcessingRequest(entry_path=entry_path, actor=Actor.DETERMINISTIC)
+    result = execute_processing(request, spec=AREA, base_dir=tmp_path / "areas")
+
+    assert result.applicable
+    assert isinstance(result.project, Area)
+    assert result.project.title == "New Area From Inbox"
+    assert not entry_path.exists(), "a processed Inbox entry must be resolved"
+
+
+def test_capture_project_and_area_do_not_share_an_applicability_namespace(tmp_path):
+    projects_dir = tmp_path / "projects"
+    areas_dir = tmp_path / "areas"
+
+    project_result = execute_capture(
+        ExecutionRequest(title="Shared Name", actor=Actor.HUMAN), base_dir=projects_dir
+    )
+    area_result = execute_capture(
+        ExecutionRequest(title="Shared Name", actor=Actor.HUMAN), spec=AREA, base_dir=areas_dir
+    )
+
+    assert project_result.applicable
+    assert area_result.applicable

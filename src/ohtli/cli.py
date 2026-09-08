@@ -10,6 +10,7 @@ from ohtli.execution.execution import (
     execute_capture,
     execute_processing,
 )
+from ohtli.execution.specs import AREA
 from ohtli.vault_io.markdown import list_inbox_entries
 
 
@@ -19,6 +20,9 @@ def main(argv: list[str] | None = None) -> int:
 
     create = subparsers.add_parser("create-project", help="Capture a new Project")
     create.add_argument("title")
+
+    create_area = subparsers.add_parser("create-area", help="Capture a new Area")
+    create_area.add_argument("title")
 
     subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
 
@@ -31,6 +35,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Not applicable: a Project titled '{args.title}' already exists.")
             return 1
         print(f"Captured Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
+    if args.command == "create-area":
+        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        result = execute_capture(request, spec=AREA)
+        if not result.applicable:
+            print(f"Not applicable: an Area titled '{args.title}' already exists.")
+            return 1
+        print(f"Captured Area '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
     if args.command == "process-inbox":

@@ -1,13 +1,18 @@
 from datetime import date
 
+from ohtli.domain.area import Area
 from ohtli.domain.project import Project
+from ohtli.representation.area import to_representation as area_to_representation
 from ohtli.representation.project import to_representation
 from ohtli.vault_io.markdown import (
+    list_existing_area_titles,
     list_existing_titles,
     list_inbox_entries,
+    read_area,
     read_inbox_entry,
     read_project,
     resolve_inbox_entry,
+    write_area,
     write_project,
 )
 
@@ -47,6 +52,44 @@ def test_list_existing_titles_skips_non_frontmatter_notes(tmp_path):
     write_project(rep, base_dir=tmp_path)
 
     assert list_existing_titles(base_dir=tmp_path) == {"Real Project"}
+
+
+def test_write_then_read_round_trip_for_area(tmp_path):
+    """The write/read/list I/O is a single class of transformation
+    reused by every Domain Object, not duplicated per type."""
+    area = Area(title="Persisted Area")
+    rep = area_to_representation(area, today=date(2026, 8, 25))
+
+    path = write_area(rep, base_dir=tmp_path)
+    assert path.exists()
+
+    loaded = read_area(path)
+    assert loaded["title"] == "Persisted Area"
+    assert loaded["properties"]["id"] == area.id
+    assert loaded["properties"]["status"] == "active"
+
+
+def test_list_existing_area_titles_reflects_persisted_files(tmp_path):
+    assert list_existing_area_titles(base_dir=tmp_path) == set()
+
+    rep = area_to_representation(Area(title="Health"), today=date(2026, 8, 25))
+    write_area(rep, base_dir=tmp_path)
+
+    assert list_existing_area_titles(base_dir=tmp_path) == {"Health"}
+
+
+def test_project_and_area_titles_are_independent_namespaces(tmp_path):
+    """A Project and an Area may share a title: existing_titles are
+    checked per-type, not globally, since they are different Domain
+    Objects."""
+    projects_dir = tmp_path / "projects"
+    areas_dir = tmp_path / "areas"
+
+    write_project(to_representation(Project(title="Shared Name"), today=date(2026, 8, 25)), base_dir=projects_dir)
+    write_area(area_to_representation(Area(title="Shared Name"), today=date(2026, 8, 25)), base_dir=areas_dir)
+
+    assert list_existing_titles(base_dir=projects_dir) == {"Shared Name"}
+    assert list_existing_area_titles(base_dir=areas_dir) == {"Shared Name"}
 
 
 def test_list_inbox_entries_on_missing_directory(tmp_path):
