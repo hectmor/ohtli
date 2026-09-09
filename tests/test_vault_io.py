@@ -4,6 +4,7 @@ from ohtli.domain.area import Area
 from ohtli.domain.project import Project
 from ohtli.representation.area import to_representation as area_to_representation
 from ohtli.representation.project import to_representation
+from ohtli.representation.context import archive
 from ohtli.vault_io.markdown import (
     list_existing_area_titles,
     list_existing_titles,
@@ -12,6 +13,7 @@ from ohtli.vault_io.markdown import (
     read_inbox_entry,
     read_project,
     resolve_inbox_entry,
+    rewrite_note,
     write_area,
     write_project,
 )
@@ -90,6 +92,19 @@ def test_project_and_area_titles_are_independent_namespaces(tmp_path):
 
     assert list_existing_titles(base_dir=projects_dir) == {"Shared Name"}
     assert list_existing_area_titles(base_dir=areas_dir) == {"Shared Name"}
+
+
+def test_rewrite_note_updates_content_at_the_same_path(tmp_path):
+    rep = to_representation(Project(title="Rewrite Me"), today=date(2026, 8, 25))
+    path = write_project(rep, base_dir=tmp_path)
+
+    archived_rep = archive(rep, today=date(2026, 9, 8))
+    returned_path = rewrite_note(path, archived_rep)
+
+    assert returned_path == path
+    reloaded = read_project(path)
+    assert reloaded["properties"]["context"] == "historical"
+    assert reloaded["title"] == "Rewrite Me", "rewrite_note must not recompute the path from title"
 
 
 def test_list_inbox_entries_on_missing_directory(tmp_path):

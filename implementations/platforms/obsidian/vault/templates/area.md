@@ -5,6 +5,7 @@ updated: <% tp.date.now("YYYY-MM-DD") %>
 tags:
 aliases:
 status: active
+context: operational
 owner:
 review_frequency: monthly
 ---

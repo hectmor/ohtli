@@ -1,10 +1,13 @@
 from ohtli.domain.area import Area
 from ohtli.execution.execution import (
     Actor,
+    ArchiveRequest,
     ExecutionRequest,
     ProcessingRequest,
+    execute_archive,
     execute_capture,
     execute_processing,
+    execute_reactivate,
 )
 from ohtli.execution.specs import AREA
 
@@ -127,3 +130,96 @@ def test_capture_project_and_area_do_not_share_an_applicability_namespace(tmp_pa
 
     assert project_result.applicable
     assert area_result.applicable
+
+
+def test_archive_is_not_applicable_when_target_does_not_exist(tmp_path):
+    request = ArchiveRequest(title="Nonexistent", actor=Actor.HUMAN)
+    result = execute_archive(request, base_dir=tmp_path)
+
+    assert not result.applicable
+    assert result.project is None
+    assert result.path is None
+
+
+def test_archive_then_reactivate_round_trip(tmp_path):
+    execute_capture(ExecutionRequest(title="Round Trip", actor=Actor.HUMAN), base_dir=tmp_path)
+
+    archived = execute_archive(
+        ArchiveRequest(title="Round Trip", actor=Actor.HUMAN), base_dir=tmp_path
+    )
+    assert archived.applicable
+    assert archived.path is not None
+
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="Round Trip", actor=Actor.DETERMINISTIC), base_dir=tmp_path
+    )
+    assert reactivated.applicable
+    assert reactivated.path == archived.path
+
+
+def test_archive_is_not_applicable_a_second_time(tmp_path):
+    execute_capture(ExecutionRequest(title="Once", actor=Actor.HUMAN), base_dir=tmp_path)
+    execute_archive(ArchiveRequest(title="Once", actor=Actor.HUMAN), base_dir=tmp_path)
+
+    second = execute_archive(ArchiveRequest(title="Once", actor=Actor.HUMAN), base_dir=tmp_path)
+
+    assert not second.applicable
+
+
+def test_reactivate_is_not_applicable_before_archive(tmp_path):
+    execute_capture(ExecutionRequest(title="Never Archived", actor=Actor.HUMAN), base_dir=tmp_path)
+
+    result = execute_reactivate(
+        ArchiveRequest(title="Never Archived", actor=Actor.HUMAN), base_dir=tmp_path
+    )
+
+    assert not result.applicable
+
+
+def test_archive_does_not_change_status_or_id(tmp_path):
+    from ohtli.vault_io.markdown import read_project
+
+    capture_result = execute_capture(
+        ExecutionRequest(title="Preserve Me", actor=Actor.HUMAN), base_dir=tmp_path
+    )
+    before = read_project(capture_result.path)
+
+    execute_archive(ArchiveRequest(title="Preserve Me", actor=Actor.HUMAN), base_dir=tmp_path)
+    after = read_project(capture_result.path)
+
+    assert after["properties"]["status"] == before["properties"]["status"]
+    assert after["properties"]["id"] == before["properties"]["id"]
+    assert after["properties"]["context"] == "historical"
+
+
+def test_archive_is_non_cascading(tmp_path):
+    """Archiving one Project must leave an unrelated Project untouched."""
+    execute_capture(ExecutionRequest(title="Archive This", actor=Actor.HUMAN), base_dir=tmp_path)
+    other = execute_capture(
+        ExecutionRequest(title="Leave This Alone", actor=Actor.HUMAN), base_dir=tmp_path
+    )
+
+    execute_archive(ArchiveRequest(title="Archive This", actor=Actor.HUMAN), base_dir=tmp_path)
+
+    from ohtli.vault_io.markdown import read_project
+
+    untouched = read_project(other.path)
+    assert untouched["properties"]["context"] == "operational"
+
+
+def test_archive_and_reactivate_work_for_a_second_domain_object(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Household", actor=Actor.HUMAN), spec=AREA, base_dir=tmp_path
+    )
+
+    archived = execute_archive(
+        ArchiveRequest(title="Household", actor=Actor.DETERMINISTIC), spec=AREA, base_dir=tmp_path
+    )
+    assert archived.applicable
+    assert isinstance(archived.project, Area)
+
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="Household", actor=Actor.HUMAN), spec=AREA, base_dir=tmp_path
+    )
+    assert reactivated.applicable
+    assert isinstance(reactivated.project, Area)

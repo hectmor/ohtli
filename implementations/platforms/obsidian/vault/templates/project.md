@@ -5,6 +5,7 @@ updated: <% tp.date.now("YYYY-MM-DD") %>
 tags:
 aliases:
 status: planned
+context: operational
 priority: medium
 owner:
 due:

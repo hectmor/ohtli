@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 from ohtli.domain.project import Project
+from ohtli.representation.context import OPERATIONAL
 from ohtli.representation.notes import nest_under_heading_level
 
 _NOTES_LEVEL = 2  # `## Notes` — carried content must nest below it
@@ -49,6 +50,7 @@ def to_representation(
             "tags": [],
             "aliases": [],
             "status": "planned",
+            "context": OPERATIONAL,
         },
         "title": project.title,
         "body": BODY_TEMPLATE.format(

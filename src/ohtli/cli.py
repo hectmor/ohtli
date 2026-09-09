@@ -5,12 +5,15 @@ import sys
 
 from ohtli.execution.execution import (
     Actor,
+    ArchiveRequest,
     ExecutionRequest,
     ProcessingRequest,
+    execute_archive,
     execute_capture,
     execute_processing,
+    execute_reactivate,
 )
-from ohtli.execution.specs import AREA
+from ohtli.execution.specs import AREA, PROJECT
 from ohtli.vault_io.markdown import list_inbox_entries
 
 
@@ -25,6 +28,18 @@ def main(argv: list[str] | None = None) -> int:
     create_area.add_argument("title")
 
     subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
+
+    archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
+    archive_project.add_argument("title")
+
+    archive_area = subparsers.add_parser("archive-area", help="Archive an Area")
+    archive_area.add_argument("title")
+
+    reactivate_project = subparsers.add_parser("reactivate-project", help="Reactivate a Project")
+    reactivate_project.add_argument("title")
+
+    reactivate_area = subparsers.add_parser("reactivate-area", help="Reactivate an Area")
+    reactivate_area.add_argument("title")
 
     args = parser.parse_args(argv)
 
@@ -59,6 +74,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.")
                 continue
             print(f"Processed Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
+    if args.command in ("archive-project", "archive-area", "reactivate-project", "reactivate-area"):
+        operation, _, kind = args.command.partition("-")
+        spec = PROJECT if kind == "project" else AREA
+        execute = execute_archive if operation == "archive" else execute_reactivate
+
+        request = ArchiveRequest(title=args.title, actor=Actor.HUMAN)
+        result = execute(request, spec=spec)
+        if not result.applicable:
+            print(f"Not applicable: '{args.title}' cannot be {operation}d.")
+            return 1
+        print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
         return 0
 
     return 1

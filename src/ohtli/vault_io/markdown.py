@@ -13,14 +13,17 @@ _TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 _RESERVED_INBOX_FILENAMES = {"README.md", "index.md"}
 
 
+def _render_note(representation: dict[str, Any]) -> str:
+    frontmatter = yaml.safe_dump(representation["properties"], sort_keys=False)
+    return f"---\n{frontmatter}---\n\n{representation['body']}"
+
+
 def _write_note(
     representation: dict[str, Any], path_fn: Any, *, base_dir: Path | None = None
 ) -> Path:
     path = path_fn(representation["title"], base_dir=base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    frontmatter = yaml.safe_dump(representation["properties"], sort_keys=False)
-    content = f"---\n{frontmatter}---\n\n{representation['body']}"
-    path.write_text(content, encoding="utf-8")
+    path.write_text(_render_note(representation), encoding="utf-8")
     return path
 
 
@@ -30,6 +33,18 @@ def write_project(representation: dict[str, Any], *, base_dir: Path | None = Non
 
 def write_area(representation: dict[str, Any], *, base_dir: Path | None = None) -> Path:
     return _write_note(representation, paths.area_file_path, base_dir=base_dir)
+
+
+def rewrite_note(path: Path, representation: dict[str, Any]) -> Path:
+    """Rewrite a note's Current Representation at its existing path.
+
+    Unlike `write_project`/`write_area` (Capture/Processing, which
+    only ever create), Archive/Reactivate update a file that already
+    exists — the path must not be recomputed from the (unchanged)
+    title.
+    """
+    path.write_text(_render_note(representation), encoding="utf-8")
+    return path
 
 
 def read_note(path: Path) -> dict[str, Any]:
