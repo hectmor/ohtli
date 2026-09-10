@@ -9,8 +9,10 @@ from typing import Any, Callable
 
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
+from ohtli.event.event import Event
 from ohtli.execution.specs import PROJECT, DomainSpec
 from ohtli.representation import context as archive_transform
+from ohtli.vault_io.events import append_event
 from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
 from ohtli.workflow import archive as archive_workflow
 from ohtli.workflow import capture, processing
@@ -30,6 +32,34 @@ class Actor(Enum):
     HYBRID = "hybrid"
 
 
+def _emit(
+    *,
+    event_type: str,
+    domain_object: Project | Area,
+    actor: Actor,
+    execution_id: str,
+    workflow: str,
+    events_dir: Path | None,
+) -> Event:
+    """Record one Event for a successful operation.
+
+    Shared by every `execute_*` function's single success path, so
+    emission logic is never duplicated per workflow. `Event !=
+    Current State`: this never influences applicability or any
+    returned Domain Object/Representation.
+    """
+    event = Event(
+        event_type=event_type,
+        object_id=domain_object.id,
+        object_type=type(domain_object).__name__,
+        actor=actor.value,
+        execution_id=execution_id,
+        workflow=workflow,
+    )
+    append_event(event, events_dir=events_dir)
+    return event
+
+
 @dataclass(frozen=True)
 class ExecutionRequest:
     title: str
@@ -43,10 +73,15 @@ class ExecutionResult:
     applicable: bool
     project: Project | Area | None
     path: Path | None
+    event: Event | None
 
 
 def execute_capture(
-    request: ExecutionRequest, *, spec: DomainSpec = PROJECT, base_dir: Path | None = None
+    request: ExecutionRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
 ) -> ExecutionResult:
     """Execute the Capture workflow for a single Domain Object title.
 
@@ -61,17 +96,26 @@ def execute_capture(
 
     `base_dir` defaults to the real vault; tests pass a temporary
     directory so they never touch the user's actual vault content.
+    `events_dir` is the equivalent for the Event log.
     """
     existing_titles = spec.list_existing_titles(base_dir=base_dir)
 
     if not capture.is_applicable(request.title, existing_titles):
-        return ExecutionResult(request=request, applicable=False, project=None, path=None)
+        return ExecutionResult(request=request, applicable=False, project=None, path=None, event=None)
 
     domain_object = capture.transform(request.title, spec.domain_type)
     representation = spec.to_representation(domain_object)
     path = spec.write(representation, base_dir=base_dir)
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} Created",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="capture",
+        events_dir=events_dir,
+    )
 
-    return ExecutionResult(request=request, applicable=True, project=domain_object, path=path)
+    return ExecutionResult(request=request, applicable=True, project=domain_object, path=path, event=event)
 
 
 @dataclass(frozen=True)
@@ -87,10 +131,15 @@ class ProcessingResult:
     applicable: bool
     project: Project | Area | None
     path: Path | None
+    event: Event | None
 
 
 def execute_processing(
-    request: ProcessingRequest, *, spec: DomainSpec = PROJECT, base_dir: Path | None = None
+    request: ProcessingRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
 ) -> ProcessingResult:
     """Execute the Processing workflow for a single Inbox entry.
 
@@ -112,14 +161,22 @@ def execute_processing(
     existing_titles = spec.list_existing_titles(base_dir=base_dir)
 
     if not processing.is_applicable(raw_text, existing_titles):
-        return ProcessingResult(request=request, applicable=False, project=None, path=None)
+        return ProcessingResult(request=request, applicable=False, project=None, path=None, event=None)
 
     domain_object = processing.transform(raw_text, spec.domain_type)
     representation = spec.to_representation(domain_object, notes=processing.derive_notes(raw_text))
     path = spec.write(representation, base_dir=base_dir)
     resolve_inbox_entry(request.entry_path)
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} Created",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="processing",
+        events_dir=events_dir,
+    )
 
-    return ProcessingResult(request=request, applicable=True, project=domain_object, path=path)
+    return ProcessingResult(request=request, applicable=True, project=domain_object, path=path, event=event)
 
 
 @dataclass(frozen=True)
@@ -140,6 +197,7 @@ class ArchiveResult:
     applicable: bool
     project: Project | Area | None
     path: Path | None
+    event: Event | None
 
 
 def _execute_contextual_transition(
@@ -147,28 +205,43 @@ def _execute_contextual_transition(
     *,
     spec: DomainSpec,
     base_dir: Path | None,
+    events_dir: Path | None,
     is_applicable: Callable[[str], bool],
     transition: Callable[[dict[str, Any]], dict[str, Any]],
+    event_verb: str,
+    workflow: str,
 ) -> ArchiveResult:
     path = spec.file_path(request.title, base_dir=base_dir)
     if not path.exists():
-        return ArchiveResult(request=request, applicable=False, project=None, path=None)
+        return ArchiveResult(request=request, applicable=False, project=None, path=None, event=None)
 
     representation = spec.read(path)
     current_context = representation["properties"].get("context")
 
     if not is_applicable(current_context):
-        return ArchiveResult(request=request, applicable=False, project=None, path=None)
+        return ArchiveResult(request=request, applicable=False, project=None, path=None, event=None)
 
     updated_representation = transition(representation)
     rewrite_note(path, updated_representation)
     domain_object = spec.from_representation(updated_representation)
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} {event_verb}",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow=workflow,
+        events_dir=events_dir,
+    )
 
-    return ArchiveResult(request=request, applicable=True, project=domain_object, path=path)
+    return ArchiveResult(request=request, applicable=True, project=domain_object, path=path, event=event)
 
 
 def execute_archive(
-    request: ArchiveRequest, *, spec: DomainSpec = PROJECT, base_dir: Path | None = None
+    request: ArchiveRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
 ) -> ArchiveResult:
     """Execute the Archive operation: move a Domain Object from
     operational to historical presence.
@@ -181,13 +254,20 @@ def execute_archive(
         request,
         spec=spec,
         base_dir=base_dir,
+        events_dir=events_dir,
         is_applicable=archive_workflow.is_applicable,
         transition=archive_transform.archive,
+        event_verb="Archived",
+        workflow="archive",
     )
 
 
 def execute_reactivate(
-    request: ArchiveRequest, *, spec: DomainSpec = PROJECT, base_dir: Path | None = None
+    request: ArchiveRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
 ) -> ArchiveResult:
     """Execute the Reactivate operation: restore operational presence.
 
@@ -198,6 +278,9 @@ def execute_reactivate(
         request,
         spec=spec,
         base_dir=base_dir,
+        events_dir=events_dir,
         is_applicable=archive_workflow.is_reactivate_applicable,
         transition=archive_transform.reactivate,
+        event_verb="Reactivated",
+        workflow="reactivate",
     )
