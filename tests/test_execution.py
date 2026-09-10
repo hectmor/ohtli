@@ -10,6 +10,7 @@ from ohtli.execution.execution import (
     execute_reactivate,
 )
 from ohtli.execution.specs import AREA
+from ohtli.vault_io.events import read_events
 
 
 def test_execution_occurs_when_applicable(tmp_path):
@@ -223,3 +224,119 @@ def test_archive_and_reactivate_work_for_a_second_domain_object(tmp_path):
     )
     assert reactivated.applicable
     assert isinstance(reactivated.project, Area)
+
+
+def test_execute_capture_emits_a_created_event(tmp_path):
+    request = ExecutionRequest(title="Event Test", actor=Actor.HUMAN)
+    result = execute_capture(request, base_dir=tmp_path, events_dir=tmp_path)
+
+    assert result.event is not None
+    assert result.event.event_type == "Project Created"
+    assert result.event.object_id == result.project.id
+    assert result.event.object_type == "Project"
+    assert result.event.actor == "human"
+    assert result.event.execution_id == request.execution_id
+    assert result.event.workflow == "capture"
+
+    events = read_events(events_dir=tmp_path)
+    assert events == [result.event]
+
+
+def test_execute_processing_emits_the_same_event_type_as_capture(tmp_path):
+    entry_path = tmp_path / "raw-entry.md"
+    entry_path.write_text("Processed Event Test\n\nSome notes.\n", encoding="utf-8")
+
+    result = execute_processing(
+        ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN),
+        base_dir=tmp_path / "projects",
+        events_dir=tmp_path,
+    )
+
+    assert result.event.event_type == "Project Created"
+    assert result.event.workflow == "processing"
+
+
+def test_execute_archive_emits_an_archived_event(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Archive Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    result = execute_archive(
+        ArchiveRequest(title="Archive Event Test", actor=Actor.DETERMINISTIC),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.event.event_type == "Project Archived"
+    assert result.event.workflow == "archive"
+    assert result.event.actor == "deterministic"
+
+
+def test_execute_reactivate_emits_a_reactivated_event(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Reactivate Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_archive(
+        ArchiveRequest(title="Reactivate Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    result = execute_reactivate(
+        ArchiveRequest(title="Reactivate Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.event.event_type == "Project Reactivated"
+    assert result.event.workflow == "reactivate"
+
+
+def test_not_applicable_operations_emit_no_event(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Duplicate Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    duplicate = execute_capture(
+        ExecutionRequest(title="Duplicate Event Test", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    not_found = execute_archive(
+        ArchiveRequest(title="Never Captured", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert duplicate.event is None
+    assert not_found.event is None
+    assert len(read_events(events_dir=tmp_path)) == 1, "only the first, applicable capture emits"
+
+
+def test_full_round_trip_produces_three_ordered_events_for_the_same_object(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="Full Round Trip", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_archive(
+        ArchiveRequest(title="Full Round Trip", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_reactivate(
+        ArchiveRequest(title="Full Round Trip", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    events = read_events(events_dir=tmp_path)
+    assert [e.event_type for e in events] == [
+        "Project Created",
+        "Project Archived",
+        "Project Reactivated",
+    ]
+    assert all(e.object_id == captured.project.id for e in events)
