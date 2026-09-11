@@ -12,12 +12,14 @@ from ohtli.domain.project import Project
 from ohtli.event.event import Event
 from ohtli.execution.specs import PROJECT, DomainSpec
 from ohtli.representation import context as archive_transform
-from ohtli.vault_io.events import append_event
+from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
 from ohtli.workflow import archive as archive_workflow
 from ohtli.workflow import capture, processing
 from ohtli.workflow import evaluation as evaluation_workflow
+from ohtli.workflow import review as review_workflow
 from ohtli.workflow.evaluation import OperationalResult
+from ohtli.workflow.review import ReviewAssessment, ReviewConclusion
 
 
 class Actor(Enum):
@@ -360,4 +362,77 @@ def execute_evaluation(
 
     return EvaluationResult(
         request=request, applicable=True, project=domain_object, path=path, event=event
+    )
+
+
+_CONCLUSION_VERBS = {
+    ReviewConclusion.ATTENTION_REQUIRED: "Attention Identified",
+    ReviewConclusion.NO_ATTENTION_REQUIRED: "No Attention Identified",
+    ReviewConclusion.INSUFFICIENT_BASIS: "Insufficient Assessment Basis Identified",
+}
+
+
+@dataclass(frozen=True)
+class ReviewRequest:
+    title: str
+    actor: Actor
+    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    since: str | None = None
+
+
+@dataclass(frozen=True)
+class ReviewResult:
+    request: ReviewRequest
+    applicable: bool
+    project: Project | Area | None
+    path: Path | None
+    event: Event | None
+    assessment: ReviewAssessment | None
+
+
+def execute_review(
+    request: ReviewRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
+) -> ReviewResult:
+    """Execute the Review workflow for a single named Project or Area.
+
+    Unlike Evaluate, applicability requires only that the target
+    exists -- archived and completed objects remain reviewable
+    (`review-workflow.md`'s "Review and Archive"). Observe and Assess
+    are real, deterministic code here: unlike Execution's Act,
+    Review's entire input (the note plus its Event history) already
+    exists in code.
+
+    Touches no representation file. `request.since`, when given,
+    bounds which Events are considered relevant to this Review's
+    temporal context.
+    """
+    path = spec.file_path(request.title, base_dir=base_dir)
+    if not path.exists():
+        return ReviewResult(
+            request=request, applicable=False, project=None, path=None, event=None, assessment=None
+        )
+
+    representation = spec.read(path)
+    domain_object = spec.from_representation(representation)
+
+    all_events = read_events(events_dir=events_dir)
+    observed = review_workflow.observe(all_events, domain_object.id, request.since)
+    evaluation_events = [e for e in observed if e.workflow == "evaluation"]
+    assessment = review_workflow.assess(representation["properties"], evaluation_events)
+
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} {_CONCLUSION_VERBS[assessment.conclusion]}",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="review",
+        events_dir=events_dir,
+    )
+
+    return ReviewResult(
+        request=request, applicable=True, project=domain_object, path=path, event=event, assessment=assessment
     )

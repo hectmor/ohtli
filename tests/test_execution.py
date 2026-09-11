@@ -5,15 +5,18 @@ from ohtli.execution.execution import (
     EvaluationRequest,
     ExecutionRequest,
     ProcessingRequest,
+    ReviewRequest,
     execute_archive,
     execute_capture,
     execute_evaluation,
     execute_processing,
     execute_reactivate,
+    execute_review,
 )
 from ohtli.execution.specs import AREA
 from ohtli.vault_io.events import read_events
 from ohtli.workflow.evaluation import OperationalResult
+from ohtli.workflow.review import ReviewConclusion
 
 
 def test_execution_occurs_when_applicable(tmp_path):
@@ -450,3 +453,106 @@ def test_execute_evaluation_allows_multiple_instances_for_the_same_object(tmp_pa
         "Project Progress Observed",
         "Project No Effective Change Observed",
     ]
+
+
+def test_execute_review_is_not_applicable_when_target_does_not_exist(tmp_path):
+    result = execute_review(
+        ReviewRequest(title="Never Captured", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+
+    assert not result.applicable
+    assert result.assessment is None
+
+
+def test_execute_review_is_insufficient_basis_with_no_evaluations(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Fresh Project", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Fresh Project", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+
+    assert result.applicable
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
+    assert result.event.event_type == "Project Insufficient Assessment Basis Identified"
+
+
+def test_execute_review_touches_no_representation(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="Untouched By Review", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    before_content = captured.path.read_text(encoding="utf-8")
+    before_mtime = captured.path.stat().st_mtime_ns
+
+    execute_review(
+        ReviewRequest(title="Untouched By Review", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert captured.path.read_text(encoding="utf-8") == before_content
+    assert captured.path.stat().st_mtime_ns == before_mtime
+
+
+def test_execute_review_reviews_an_archived_target(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Archived And Reviewable", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_archive(
+        ArchiveRequest(title="Archived And Reviewable", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Archived And Reviewable", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, "an archived target must remain reviewable"
+
+
+def test_execute_review_surfaces_attention_for_a_completed_gap(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Outcome Gap", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+    execute_evaluation(
+        EvaluationRequest(title="Outcome Gap", result=OperationalResult.OUTCOME_REACHED, actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Outcome Gap", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+
+    assert result.assessment.conclusion == ReviewConclusion.ATTENTION_REQUIRED
+    assert result.event.event_type == "Project Attention Identified"
+
+
+def test_execute_review_since_excludes_earlier_events(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Since Bound Test", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+    execute_evaluation(
+        EvaluationRequest(title="Since Bound Test", result=OperationalResult.PROGRESS, actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    far_future = "2099-01-01T00:00:00+00:00"
+    result = execute_review(
+        ReviewRequest(title="Since Bound Test", actor=Actor.HUMAN, since=far_future),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS, (
+        "a since bound in the future must exclude all prior evaluation Events"
+    )

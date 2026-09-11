@@ -9,11 +9,13 @@ from ohtli.execution.execution import (
     EvaluationRequest,
     ExecutionRequest,
     ProcessingRequest,
+    ReviewRequest,
     execute_archive,
     execute_capture,
     execute_evaluation,
     execute_processing,
     execute_reactivate,
+    execute_review,
 )
 from ohtli.execution.specs import AREA, PROJECT
 from ohtli.vault_io.markdown import list_inbox_entries
@@ -55,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     evaluate_area.add_argument("title")
     evaluate_area.add_argument("--result", required=True, choices=[r.value for r in OperationalResult])
+
+    review_project = subparsers.add_parser("review-project", help="Review a Project")
+    review_project.add_argument("title")
+    review_project.add_argument("--since", default=None)
+
+    review_area = subparsers.add_parser("review-area", help="Review an Area")
+    review_area.add_argument("title")
+    review_area.add_argument("--since", default=None)
 
     args = parser.parse_args(argv)
 
@@ -114,6 +124,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.")
             return 1
         print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
+        return 0
+
+    if args.command in ("review-project", "review-area"):
+        spec = PROJECT if args.command == "review-project" else AREA
+        request = ReviewRequest(title=args.title, actor=Actor.HUMAN, since=args.since)
+        result = execute_review(request, spec=spec)
+        if not result.applicable:
+            print(f"Not applicable: '{args.title}' does not exist.")
+            return 1
+        print(
+            f"Reviewed '{result.project.title}': {result.assessment.conclusion.value} "
+            f"({'; '.join(result.assessment.basis)})"
+        )
         return 0
 
     return 1
