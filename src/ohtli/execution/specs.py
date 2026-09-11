@@ -19,6 +19,7 @@ from ohtli.vault_io.markdown import (
     write_area,
     write_project,
 )
+from ohtli.workflow.evaluation import OperationalResult
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class DomainSpec:
     read: Callable[[Path], dict[str, Any]]
     file_path: Callable[..., Path]
     list_existing_titles: Callable[..., set[str]]
+    allowed_results: frozenset[OperationalResult]
 
 
 PROJECT = DomainSpec(
@@ -47,6 +49,14 @@ PROJECT = DomainSpec(
     read=read_project,
     file_path=paths.project_file_path,
     list_existing_titles=list_existing_titles,
+    allowed_results=frozenset(
+        {
+            OperationalResult.PROGRESS,
+            OperationalResult.OUTCOME_REACHED,
+            OperationalResult.NO_EFFECTIVE_CHANGE,
+            OperationalResult.DEGRADATION,
+        }
+    ),
 )
 
 AREA = DomainSpec(
@@ -57,4 +67,11 @@ AREA = DomainSpec(
     read=read_area,
     file_path=paths.area_file_path,
     list_existing_titles=list_existing_area_titles,
+    allowed_results=frozenset(
+        {
+            OperationalResult.MAINTENANCE,
+            OperationalResult.NO_EFFECTIVE_CHANGE,
+            OperationalResult.DEGRADATION,
+        }
+    ),
 )

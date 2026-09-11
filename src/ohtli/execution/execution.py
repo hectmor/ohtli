@@ -16,6 +16,8 @@ from ohtli.vault_io.events import append_event
 from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
 from ohtli.workflow import archive as archive_workflow
 from ohtli.workflow import capture, processing
+from ohtli.workflow import evaluation as evaluation_workflow
+from ohtli.workflow.evaluation import OperationalResult
 
 
 class Actor(Enum):
@@ -283,4 +285,79 @@ def execute_reactivate(
         transition=archive_transform.reactivate,
         event_verb="Reactivated",
         workflow="reactivate",
+    )
+
+
+_RESULT_VERBS = {
+    OperationalResult.PROGRESS: "Progress Observed",
+    OperationalResult.MAINTENANCE: "Maintenance Performed",
+    OperationalResult.OUTCOME_REACHED: "Outcome Reached",
+    OperationalResult.NO_EFFECTIVE_CHANGE: "No Effective Change Observed",
+    OperationalResult.DEGRADATION: "Degradation Observed",
+}
+
+
+@dataclass(frozen=True)
+class EvaluationRequest:
+    title: str
+    result: OperationalResult
+    actor: Actor
+    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    request: EvaluationRequest
+    applicable: bool
+    project: Project | Area | None
+    path: Path | None
+    event: Event | None
+
+
+def execute_evaluation(
+    request: EvaluationRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
+) -> EvaluationResult:
+    """Execute the Evaluate operation: record the actual operational
+    result of work already performed on an actionable Project or Area.
+
+    Evaluate is the only one of Execution's three conceptual
+    operations (Select, Act, Evaluate) this function represents —
+    Select and Act happen outside Ohtli's code ("Ohtli distinguishes
+    performing work from recording that work",
+    `execution-workflow.md`). `request.result` is the already-observed
+    outcome supplied by the caller, not computed here.
+
+    Unlike Capture/Processing/Archive/Reactivate, this touches no
+    representation file: `rewrite_note`/`write_*` are never called.
+    Results are not required to exist as stored status values, and
+    `status` must never be inferred from a result (Outcome and
+    Lifecycle Separation) — only the emitted Event records what
+    happened.
+    """
+    path = spec.file_path(request.title, base_dir=base_dir)
+    if not path.exists():
+        return EvaluationResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    representation = spec.read(path)
+    current_context = representation["properties"].get("context")
+
+    if not evaluation_workflow.is_applicable(current_context, request.result, spec.allowed_results):
+        return EvaluationResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    domain_object = spec.from_representation(representation)
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} {_RESULT_VERBS[request.result]}",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="evaluation",
+        events_dir=events_dir,
+    )
+
+    return EvaluationResult(
+        request=request, applicable=True, project=domain_object, path=path, event=event
     )

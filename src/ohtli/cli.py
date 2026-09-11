@@ -6,15 +6,18 @@ import sys
 from ohtli.execution.execution import (
     Actor,
     ArchiveRequest,
+    EvaluationRequest,
     ExecutionRequest,
     ProcessingRequest,
     execute_archive,
     execute_capture,
+    execute_evaluation,
     execute_processing,
     execute_reactivate,
 )
 from ohtli.execution.specs import AREA, PROJECT
 from ohtli.vault_io.markdown import list_inbox_entries
+from ohtli.workflow.evaluation import OperationalResult
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +43,18 @@ def main(argv: list[str] | None = None) -> int:
 
     reactivate_area = subparsers.add_parser("reactivate-area", help="Reactivate an Area")
     reactivate_area.add_argument("title")
+
+    evaluate_project = subparsers.add_parser(
+        "evaluate-project", help="Record the operational result of work performed on a Project"
+    )
+    evaluate_project.add_argument("title")
+    evaluate_project.add_argument("--result", required=True, choices=[r.value for r in OperationalResult])
+
+    evaluate_area = subparsers.add_parser(
+        "evaluate-area", help="Record the operational result of work performed on an Area"
+    )
+    evaluate_area.add_argument("title")
+    evaluate_area.add_argument("--result", required=True, choices=[r.value for r in OperationalResult])
 
     args = parser.parse_args(argv)
 
@@ -87,6 +102,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Not applicable: '{args.title}' cannot be {operation}d.")
             return 1
         print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
+        return 0
+
+    if args.command in ("evaluate-project", "evaluate-area"):
+        spec = PROJECT if args.command == "evaluate-project" else AREA
+        request = EvaluationRequest(
+            title=args.title, result=OperationalResult(args.result), actor=Actor.HUMAN
+        )
+        result = execute_evaluation(request, spec=spec)
+        if not result.applicable:
+            print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.")
+            return 1
+        print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
         return 0
 
     return 1

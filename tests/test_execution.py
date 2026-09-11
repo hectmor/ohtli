@@ -2,15 +2,18 @@ from ohtli.domain.area import Area
 from ohtli.execution.execution import (
     Actor,
     ArchiveRequest,
+    EvaluationRequest,
     ExecutionRequest,
     ProcessingRequest,
     execute_archive,
     execute_capture,
+    execute_evaluation,
     execute_processing,
     execute_reactivate,
 )
 from ohtli.execution.specs import AREA
 from ohtli.vault_io.events import read_events
+from ohtli.workflow.evaluation import OperationalResult
 
 
 def test_execution_occurs_when_applicable(tmp_path):
@@ -340,3 +343,110 @@ def test_full_round_trip_produces_three_ordered_events_for_the_same_object(tmp_p
         "Project Reactivated",
     ]
     assert all(e.object_id == captured.project.id for e in events)
+
+
+def test_execute_evaluation_emits_the_correct_event_and_touches_no_representation(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="Evaluate Me", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    before_content = captured.path.read_text(encoding="utf-8")
+    before_mtime = captured.path.stat().st_mtime_ns
+
+    result = execute_evaluation(
+        EvaluationRequest(title="Evaluate Me", result=OperationalResult.PROGRESS, actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.event.event_type == "Project Progress Observed"
+    assert result.event.workflow == "evaluation"
+    assert captured.path.read_text(encoding="utf-8") == before_content, "Evaluate must not rewrite the note"
+    assert captured.path.stat().st_mtime_ns == before_mtime
+
+
+def test_execute_evaluation_rejects_a_result_the_domain_object_does_not_allow(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Household Chores", actor=Actor.HUMAN),
+        spec=AREA,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_evaluation(
+        EvaluationRequest(
+            title="Household Chores", result=OperationalResult.OUTCOME_REACHED, actor=Actor.HUMAN
+        ),
+        spec=AREA,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+    assert result.event is None
+
+
+def test_execute_evaluation_rejects_an_archived_target(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Archived Project", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_archive(
+        ArchiveRequest(title="Archived Project", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_evaluation(
+        EvaluationRequest(
+            title="Archived Project", result=OperationalResult.PROGRESS, actor=Actor.HUMAN
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+
+
+def test_execute_evaluation_is_not_applicable_when_target_does_not_exist(tmp_path):
+    result = execute_evaluation(
+        EvaluationRequest(title="Never Captured", result=OperationalResult.PROGRESS, actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+    assert result.project is None
+    assert result.path is None
+
+
+def test_execute_evaluation_allows_multiple_instances_for_the_same_object(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Iterative Work", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    first = execute_evaluation(
+        EvaluationRequest(title="Iterative Work", result=OperationalResult.PROGRESS, actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    second = execute_evaluation(
+        EvaluationRequest(
+            title="Iterative Work", result=OperationalResult.NO_EFFECTIVE_CHANGE, actor=Actor.DETERMINISTIC
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert first.applicable
+    assert second.applicable
+    events = read_events(events_dir=tmp_path)
+    assert [e.event_type for e in events if e.workflow == "evaluation"] == [
+        "Project Progress Observed",
+        "Project No Effective Change Observed",
+    ]
