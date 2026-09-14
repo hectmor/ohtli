@@ -1,8 +1,11 @@
+import re
 from datetime import date
 
 from ohtli.domain.project import Project
 from ohtli.representation.project import to_representation
 from ohtli.representation.understanding import enrich
+
+_UNDERSTANDING_HEADING_RE = re.compile(r"^## Understanding\s*$", re.MULTILINE)
 
 
 def _rep():
@@ -95,3 +98,29 @@ def test_enrich_nests_headings_inside_the_understanding_text():
     )
 
     assert "#### A heading inside the understanding" in rep["body"]
+
+
+def test_enrich_creates_the_heading_even_when_notes_carries_a_similar_word():
+    """A deeper heading like `### Understanding of the domain` (e.g.
+    carried in from an Inbox entry under `## Notes`) must not be
+    mistaken for the real `## Understanding` section — a naive
+    substring check on "## Understanding" would match inside it.
+    """
+    rep = _rep()
+    rep["body"] = rep["body"].replace(
+        "## Notes\n", "## Notes\n### Understanding of the domain\nSome carried-in notes.\n"
+    )
+
+    enriched = enrich(
+        rep,
+        understanding_title="Real Finding",
+        understanding="Actual developed understanding.",
+        provenance=("Source",),
+        today=date(2026, 9, 14),
+    )
+
+    assert len(_UNDERSTANDING_HEADING_RE.findall(enriched["body"])) == 1, (
+        "exactly one real '## Understanding' heading must exist; the carried-in "
+        "'### Understanding of the domain' heading must not be mistaken for it"
+    )
+    assert "Actual developed understanding." in enriched["body"]

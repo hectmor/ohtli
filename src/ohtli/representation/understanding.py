@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any
 
 from ohtli.representation.notes import nest_under_heading_level
 
 _UNDERSTANDING_HEADING = "## Understanding"
+_UNDERSTANDING_HEADING_RE = re.compile(r"^## Understanding\s*$", re.MULTILINE)
 _ENTRY_LEVEL = 3  # entries nest as `### {title}` under `## Understanding`
 
 
@@ -41,7 +43,7 @@ def enrich(
     provenance_line = "Developed from: " + "; ".join(provenance)
     entry = f"### {understanding_title}\n\n{nested_understanding}\n\n{provenance_line}\n"
 
-    if _UNDERSTANDING_HEADING in body:
+    if _UNDERSTANDING_HEADING_RE.search(body):
         new_body = body.rstrip("\n") + "\n\n" + entry
     else:
         new_body = body.rstrip("\n") + "\n\n" + _UNDERSTANDING_HEADING + "\n\n" + entry
