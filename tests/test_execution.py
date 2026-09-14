@@ -4,11 +4,13 @@ from ohtli.execution.execution import (
     ArchiveRequest,
     EvaluationRequest,
     ExecutionRequest,
+    KnowledgeRequest,
     ProcessingRequest,
     ReviewRequest,
     execute_archive,
     execute_capture,
     execute_evaluation,
+    execute_knowledge,
     execute_processing,
     execute_reactivate,
     execute_review,
@@ -556,3 +558,204 @@ def test_execute_review_since_excludes_earlier_events(tmp_path):
     assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS, (
         "a since bound in the future must exclude all prior evaluation Events"
     )
+
+
+def test_execute_knowledge_enriches_and_emits_the_correct_event(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Enrich Me", actor=Actor.HUMAN), base_dir=tmp_path, events_dir=tmp_path
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Enrich Me",
+            understanding_title="A Finding",
+            understanding="The root cause was X.",
+            provenance=("Reference A", "Experience"),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.event.event_type == "Project Knowledge Enriched"
+    assert result.event.workflow == "knowledge"
+    body = result.path.read_text(encoding="utf-8")
+    assert "## Understanding" in body
+    assert "The root cause was X." in body
+    assert "Developed from: Reference A; Experience" in body
+
+
+def test_execute_knowledge_rejects_empty_understanding(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="No Understanding", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="No Understanding",
+            understanding_title="Empty",
+            understanding="   ",
+            provenance=("Source",),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+    assert result.event is None
+
+
+def test_execute_knowledge_rejects_empty_provenance(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="No Provenance", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="No Provenance",
+            understanding_title="Unsourced",
+            understanding="Something.",
+            provenance=(),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+
+
+def test_execute_knowledge_is_not_applicable_when_target_does_not_exist(tmp_path):
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Never Captured",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not result.applicable
+    assert result.project is None
+    assert result.path is None
+
+
+def test_execute_knowledge_enriches_an_archived_target(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Archived And Enrichable", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_archive(
+        ArchiveRequest(title="Archived And Enrichable", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Archived And Enrichable",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, "an archived target must remain enrichable"
+
+
+def test_execute_knowledge_does_not_change_status_or_context(tmp_path):
+    from ohtli.vault_io.markdown import read_project
+
+    captured = execute_capture(
+        ExecutionRequest(title="Preserve My Status", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    before = read_project(captured.path)
+
+    execute_knowledge(
+        KnowledgeRequest(
+            title="Preserve My Status",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    after = read_project(captured.path)
+
+    assert after["properties"]["status"] == before["properties"]["status"]
+    assert after["properties"]["context"] == before["properties"]["context"]
+
+
+def test_execute_knowledge_second_enrichment_appends_rather_than_replaces(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Two Enrichments", actor=Actor.HUMAN),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    execute_knowledge(
+        KnowledgeRequest(
+            title="Two Enrichments",
+            understanding_title="First",
+            understanding="First understanding.",
+            provenance=("Source A",),
+            actor=Actor.HUMAN,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Two Enrichments",
+            understanding_title="Second",
+            understanding="Second understanding.",
+            provenance=("Source B",),
+            actor=Actor.DETERMINISTIC,
+        ),
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    body = result.path.read_text(encoding="utf-8")
+    assert body.count("## Understanding") == 1
+    assert "First understanding." in body
+    assert "Second understanding." in body
+
+
+def test_execute_knowledge_enriches_a_second_domain_object(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Household Knowledge", actor=Actor.HUMAN), spec=AREA, base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Household Knowledge",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        spec=AREA,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.event.event_type == "Area Knowledge Enriched"

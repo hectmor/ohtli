@@ -12,11 +12,13 @@ from ohtli.domain.project import Project
 from ohtli.event.event import Event
 from ohtli.execution.specs import PROJECT, DomainSpec
 from ohtli.representation import context as archive_transform
+from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
 from ohtli.workflow import archive as archive_workflow
 from ohtli.workflow import capture, processing
 from ohtli.workflow import evaluation as evaluation_workflow
+from ohtli.workflow import knowledge as knowledge_workflow
 from ohtli.workflow import review as review_workflow
 from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.review import ReviewAssessment, ReviewConclusion
@@ -436,3 +438,70 @@ def execute_review(
     return ReviewResult(
         request=request, applicable=True, project=domain_object, path=path, event=event, assessment=assessment
     )
+
+
+@dataclass(frozen=True)
+class KnowledgeRequest:
+    title: str
+    understanding_title: str
+    understanding: str
+    provenance: tuple[str, ...]
+    actor: Actor
+    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+@dataclass(frozen=True)
+class KnowledgeResult:
+    request: KnowledgeRequest
+    applicable: bool
+    project: Project | Area | None
+    path: Path | None
+    event: Event | None
+
+
+def execute_knowledge(
+    request: KnowledgeRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
+) -> KnowledgeResult:
+    """Execute Knowledge's Externalize operation: enrich an existing
+    Project or Area with Developed Understanding supplied by the
+    caller.
+
+    Explore/Extract/Connect/Synthesize happen outside Ohtli's code
+    (mirroring Execution's Act) -- the actor supplies the
+    already-developed understanding, mirroring Evaluate's
+    already-observed result. Unlike Evaluate/Review, this DOES write
+    to the representation: Externalize's own definition is enriching
+    an existing object, and Epistemic Provenance is only testable
+    against a persisted representation.
+    """
+    path = spec.file_path(request.title, base_dir=base_dir)
+    if not path.exists():
+        return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    if not knowledge_workflow.is_applicable(request.understanding, request.provenance):
+        return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    representation = spec.read(path)
+    enriched_representation = understanding_transform.enrich(
+        representation,
+        understanding_title=request.understanding_title,
+        understanding=request.understanding,
+        provenance=request.provenance,
+    )
+    rewrite_note(path, enriched_representation)
+    domain_object = spec.from_representation(enriched_representation)
+
+    event = _emit(
+        event_type=f"{spec.domain_type.__name__} Knowledge Enriched",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="knowledge",
+        events_dir=events_dir,
+    )
+
+    return KnowledgeResult(request=request, applicable=True, project=domain_object, path=path, event=event)

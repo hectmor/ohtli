@@ -8,11 +8,13 @@ from ohtli.execution.execution import (
     ArchiveRequest,
     EvaluationRequest,
     ExecutionRequest,
+    KnowledgeRequest,
     ProcessingRequest,
     ReviewRequest,
     execute_archive,
     execute_capture,
     execute_evaluation,
+    execute_knowledge,
     execute_processing,
     execute_reactivate,
     execute_review,
@@ -65,6 +67,22 @@ def main(argv: list[str] | None = None) -> int:
     review_area = subparsers.add_parser("review-area", help="Review an Area")
     review_area.add_argument("title")
     review_area.add_argument("--since", default=None)
+
+    enrich_project = subparsers.add_parser(
+        "enrich-project", help="Enrich a Project with Developed Understanding"
+    )
+    enrich_project.add_argument("title")
+    enrich_project.add_argument("--understanding-title", required=True)
+    enrich_project.add_argument("--understanding", required=True)
+    enrich_project.add_argument("--provenance", required=True, nargs="+")
+
+    enrich_area = subparsers.add_parser(
+        "enrich-area", help="Enrich an Area with Developed Understanding"
+    )
+    enrich_area.add_argument("title")
+    enrich_area.add_argument("--understanding-title", required=True)
+    enrich_area.add_argument("--understanding", required=True)
+    enrich_area.add_argument("--provenance", required=True, nargs="+")
 
     args = parser.parse_args(argv)
 
@@ -137,6 +155,22 @@ def main(argv: list[str] | None = None) -> int:
             f"Reviewed '{result.project.title}': {result.assessment.conclusion.value} "
             f"({'; '.join(result.assessment.basis)})"
         )
+        return 0
+
+    if args.command in ("enrich-project", "enrich-area"):
+        spec = PROJECT if args.command == "enrich-project" else AREA
+        request = KnowledgeRequest(
+            title=args.title,
+            understanding_title=args.understanding_title,
+            understanding=args.understanding,
+            provenance=tuple(args.provenance),
+            actor=Actor.HUMAN,
+        )
+        result = execute_knowledge(request, spec=spec)
+        if not result.applicable:
+            print(f"Not applicable: '{args.title}' cannot be enriched.")
+            return 1
+        print(f"Enriched '{result.project.title}' -> {result.event.event_type}")
         return 0
 
     return 1
