@@ -8,6 +8,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 PROJECTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "projects"
 AREAS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "areas"
 RESOURCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "resources"
+REFERENCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "references"
 INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 EVENTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / ".ohtli"
 
@@ -33,6 +34,10 @@ def area_file_path(title: str, base_dir: Path | None = None) -> Path:
 
 def resource_file_path(title: str, base_dir: Path | None = None) -> Path:
     return _note_file_path(title, RESOURCES_DIR, base_dir)
+
+
+def reference_file_path(title: str, base_dir: Path | None = None) -> Path:
+    return _note_file_path(title, REFERENCES_DIR, base_dir)
 
 
 def events_file_path(base_dir: Path | None = None) -> Path:

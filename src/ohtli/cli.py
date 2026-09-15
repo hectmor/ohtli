@@ -19,7 +19,7 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, PROJECT, RESOURCE
+from ohtli.execution.specs import AREA, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 
@@ -37,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     create_resource = subparsers.add_parser("create-resource", help="Capture a new Resource")
     create_resource.add_argument("title")
 
+    create_reference = subparsers.add_parser("create-reference", help="Capture a new Reference")
+    create_reference.add_argument("title")
+
     subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
 
     archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
@@ -48,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     archive_resource = subparsers.add_parser("archive-resource", help="Archive a Resource")
     archive_resource.add_argument("title")
 
+    archive_reference = subparsers.add_parser("archive-reference", help="Archive a Reference")
+    archive_reference.add_argument("title")
+
     reactivate_project = subparsers.add_parser("reactivate-project", help="Reactivate a Project")
     reactivate_project.add_argument("title")
 
@@ -56,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
 
     reactivate_resource = subparsers.add_parser("reactivate-resource", help="Reactivate a Resource")
     reactivate_resource.add_argument("title")
+
+    reactivate_reference = subparsers.add_parser("reactivate-reference", help="Reactivate a Reference")
+    reactivate_reference.add_argument("title")
 
     evaluate_project = subparsers.add_parser(
         "evaluate-project", help="Record the operational result of work performed on a Project"
@@ -80,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     review_resource = subparsers.add_parser("review-resource", help="Review a Resource")
     review_resource.add_argument("title")
     review_resource.add_argument("--since", default=None)
+
+    review_reference = subparsers.add_parser("review-reference", help="Review a Reference")
+    review_reference.add_argument("title")
+    review_reference.add_argument("--since", default=None)
 
     enrich_project = subparsers.add_parser(
         "enrich-project", help="Enrich a Project with Developed Understanding"
@@ -107,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    spec_by_kind = {"project": PROJECT, "area": AREA, "resource": RESOURCE}
+    spec_by_kind = {"project": PROJECT, "area": AREA, "resource": RESOURCE, "reference": REFERENCE}
 
     if args.command == "create-project":
         request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
@@ -136,6 +149,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Captured Resource '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
+    if args.command == "create-reference":
+        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        result = execute_capture(request, spec=REFERENCE)
+        if not result.applicable:
+            print(f"Not applicable: a Reference titled '{args.title}' already exists.")
+            return 1
+        print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
     if args.command == "process-inbox":
         entries = list_inbox_entries()
         if not entries:
@@ -155,9 +177,11 @@ def main(argv: list[str] | None = None) -> int:
         "archive-project",
         "archive-area",
         "archive-resource",
+        "archive-reference",
         "reactivate-project",
         "reactivate-area",
         "reactivate-resource",
+        "reactivate-reference",
     ):
         operation, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]
@@ -183,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
         return 0
 
-    if args.command in ("review-project", "review-area", "review-resource"):
+    if args.command in ("review-project", "review-area", "review-resource", "review-reference"):
         _, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]
         request = ReviewRequest(title=args.title, actor=Actor.HUMAN, since=args.since)
