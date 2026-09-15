@@ -6,18 +6,24 @@ from typing import Any, Callable
 
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
+from ohtli.domain.resource import Resource
 from ohtli.representation.area import from_representation as area_from_representation
 from ohtli.representation.area import to_representation as area_to_representation
 from ohtli.representation.project import from_representation as project_from_representation
 from ohtli.representation.project import to_representation as project_to_representation
+from ohtli.representation.resource import from_representation as resource_from_representation
+from ohtli.representation.resource import to_representation as resource_to_representation
 from ohtli.vault_io import paths
 from ohtli.vault_io.markdown import (
     list_existing_area_titles,
+    list_existing_resource_titles,
     list_existing_titles,
     read_area,
     read_project,
+    read_resource,
     write_area,
     write_project,
+    write_resource,
 )
 from ohtli.workflow.evaluation import OperationalResult
 
@@ -74,4 +80,20 @@ AREA = DomainSpec(
             OperationalResult.DEGRADATION,
         }
     ),
+)
+
+RESOURCE = DomainSpec(
+    domain_type=Resource,
+    to_representation=resource_to_representation,
+    from_representation=resource_from_representation,
+    write=write_resource,
+    read=read_resource,
+    file_path=paths.resource_file_path,
+    list_existing_titles=list_existing_resource_titles,
+    # Resource is not an Execution target (execution-workflow.md's
+    # Related Domain Objects list); an empty set makes execute_evaluation
+    # always not-applicable for Resource with zero branching in
+    # execution.py, the same mechanism Phase 15 used for narrower
+    # exclusions (Area excluding only Outcome Reached).
+    allowed_results=frozenset(),
 )
