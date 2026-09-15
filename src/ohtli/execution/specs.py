@@ -6,23 +6,29 @@ from typing import Any, Callable
 
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
+from ohtli.domain.reference import Reference
 from ohtli.domain.resource import Resource
 from ohtli.representation.area import from_representation as area_from_representation
 from ohtli.representation.area import to_representation as area_to_representation
 from ohtli.representation.project import from_representation as project_from_representation
 from ohtli.representation.project import to_representation as project_to_representation
+from ohtli.representation.reference import from_representation as reference_from_representation
+from ohtli.representation.reference import to_representation as reference_to_representation
 from ohtli.representation.resource import from_representation as resource_from_representation
 from ohtli.representation.resource import to_representation as resource_to_representation
 from ohtli.vault_io import paths
 from ohtli.vault_io.markdown import (
     list_existing_area_titles,
+    list_existing_reference_titles,
     list_existing_resource_titles,
     list_existing_titles,
     read_area,
     read_project,
+    read_reference,
     read_resource,
     write_area,
     write_project,
+    write_reference,
     write_resource,
 )
 from ohtli.workflow.evaluation import OperationalResult
@@ -95,5 +101,17 @@ RESOURCE = DomainSpec(
     # always not-applicable for Resource with zero branching in
     # execution.py, the same mechanism Phase 15 used for narrower
     # exclusions (Area excluding only Outcome Reached).
+    allowed_results=frozenset(),
+)
+
+REFERENCE = DomainSpec(
+    domain_type=Reference,
+    to_representation=reference_to_representation,
+    from_representation=reference_from_representation,
+    write=write_reference,
+    read=read_reference,
+    file_path=paths.reference_file_path,
+    list_existing_titles=list_existing_reference_titles,
+    # Reference is not an Execution target either, same as Resource.
     allowed_results=frozenset(),
 )

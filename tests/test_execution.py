@@ -15,7 +15,8 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, RESOURCE
+from ohtli.execution.specs import AREA, REFERENCE, RESOURCE
+from ohtli.domain.reference import Reference
 from ohtli.domain.resource import Resource
 from ohtli.vault_io.events import read_events
 from ohtli.workflow.evaluation import OperationalResult
@@ -857,3 +858,136 @@ def test_execute_evaluation_is_never_applicable_for_resource(tmp_path):
             events_dir=tmp_path,
         )
         assert not result.applicable, f"{result_value} must not be applicable for Resource"
+
+
+def test_execute_capture_and_reactivate_work_for_reference(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="A Paper", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert captured.applicable
+    assert isinstance(captured.project, Reference)
+    assert captured.event.event_type == "Reference Created"
+
+    archived = execute_archive(
+        ArchiveRequest(title="A Paper", actor=Actor.DETERMINISTIC),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert archived.applicable
+    assert archived.event.event_type == "Reference Archived"
+
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="A Paper", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert reactivated.applicable
+    assert reactivated.event.event_type == "Reference Reactivated"
+
+
+def test_execute_processing_carries_inbox_content_into_reference_notes(tmp_path):
+    entry_path = tmp_path / "raw-entry.md"
+    entry_path.write_text(
+        "Interesting Paper On Caching\n\nFound via a colleague, worth citing later.\n",
+        encoding="utf-8",
+    )
+
+    result = execute_processing(
+        ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path / "references",
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert isinstance(result.project, Reference)
+    assert result.project.title == "Interesting Paper On Caching"
+    assert result.event.event_type == "Reference Created"
+    assert result.event.workflow == "processing"
+
+    body = result.path.read_text(encoding="utf-8")
+    assert "Found via a colleague, worth citing later." in body
+    assert not entry_path.exists(), "a processed Inbox entry must be resolved"
+
+
+def test_execute_review_works_for_reference(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Reviewable Reference", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Reviewable Reference", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
+    assert result.event.event_type == "Reference Insufficient Assessment Basis Identified"
+
+
+def test_execute_evaluation_is_never_applicable_for_reference(tmp_path):
+    """Reference is not an Execution target (execution-workflow.md):
+    every OperationalResult value must be rejected, not just one."""
+    execute_capture(
+        ExecutionRequest(title="Also Not An Execution Target", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    for result_value in OperationalResult:
+        result = execute_evaluation(
+            EvaluationRequest(
+                title="Also Not An Execution Target", result=result_value, actor=Actor.HUMAN
+            ),
+            spec=REFERENCE,
+            base_dir=tmp_path,
+            events_dir=tmp_path,
+        )
+        assert not result.applicable, f"{result_value} must not be applicable for Reference"
+
+
+def test_execute_knowledge_currently_succeeds_for_reference_despite_not_being_a_spec_target(tmp_path):
+    """Documents a known, accepted gap rather than leaving it an
+    untested assumption: knowledge-workflow.md only names Project,
+    Area, and Resource as Externalize targets -- Reference is a
+    source, not an enrichment target. But nothing in execute_knowledge()
+    or representation/understanding.py's enrich() is type-aware, so
+    this call succeeds today. Excluded only by CLI omission (no
+    enrich-reference command), not by a structural guard -- there is
+    no spec evidence to justify inventing one for this phase."""
+    execute_capture(
+        ExecutionRequest(title="Enrichable Despite The Spec", actor=Actor.HUMAN),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Enrichable Despite The Spec",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        spec=REFERENCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, (
+        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
+        "Domain Objects; this must stay true until a future phase adds one deliberately"
+    )
+    assert result.event.event_type == "Reference Knowledge Enriched"
