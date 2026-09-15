@@ -19,7 +19,7 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, PROJECT, REFERENCE, RESOURCE
+from ohtli.execution.specs import AREA, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 
@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     create_reference = subparsers.add_parser("create-reference", help="Capture a new Reference")
     create_reference.add_argument("title")
 
+    create_meeting = subparsers.add_parser("create-meeting", help="Capture a new Meeting")
+    create_meeting.add_argument("title")
+
     subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
 
     archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
@@ -54,6 +57,9 @@ def main(argv: list[str] | None = None) -> int:
     archive_reference = subparsers.add_parser("archive-reference", help="Archive a Reference")
     archive_reference.add_argument("title")
 
+    archive_meeting = subparsers.add_parser("archive-meeting", help="Archive a Meeting")
+    archive_meeting.add_argument("title")
+
     reactivate_project = subparsers.add_parser("reactivate-project", help="Reactivate a Project")
     reactivate_project.add_argument("title")
 
@@ -65,6 +71,9 @@ def main(argv: list[str] | None = None) -> int:
 
     reactivate_reference = subparsers.add_parser("reactivate-reference", help="Reactivate a Reference")
     reactivate_reference.add_argument("title")
+
+    reactivate_meeting = subparsers.add_parser("reactivate-meeting", help="Reactivate a Meeting")
+    reactivate_meeting.add_argument("title")
 
     evaluate_project = subparsers.add_parser(
         "evaluate-project", help="Record the operational result of work performed on a Project"
@@ -94,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     review_reference.add_argument("title")
     review_reference.add_argument("--since", default=None)
 
+    review_meeting = subparsers.add_parser("review-meeting", help="Review a Meeting")
+    review_meeting.add_argument("title")
+    review_meeting.add_argument("--since", default=None)
+
     enrich_project = subparsers.add_parser(
         "enrich-project", help="Enrich a Project with Developed Understanding"
     )
@@ -120,7 +133,13 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    spec_by_kind = {"project": PROJECT, "area": AREA, "resource": RESOURCE, "reference": REFERENCE}
+    spec_by_kind = {
+        "project": PROJECT,
+        "area": AREA,
+        "resource": RESOURCE,
+        "reference": REFERENCE,
+        "meeting": MEETING,
+    }
 
     if args.command == "create-project":
         request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
@@ -158,6 +177,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
+    if args.command == "create-meeting":
+        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        result = execute_capture(request, spec=MEETING)
+        if not result.applicable:
+            print(f"Not applicable: a Meeting titled '{args.title}' already exists.")
+            return 1
+        print(f"Captured Meeting '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
     if args.command == "process-inbox":
         entries = list_inbox_entries()
         if not entries:
@@ -178,10 +206,12 @@ def main(argv: list[str] | None = None) -> int:
         "archive-area",
         "archive-resource",
         "archive-reference",
+        "archive-meeting",
         "reactivate-project",
         "reactivate-area",
         "reactivate-resource",
         "reactivate-reference",
+        "reactivate-meeting",
     ):
         operation, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]
@@ -207,7 +237,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
         return 0
 
-    if args.command in ("review-project", "review-area", "review-resource", "review-reference"):
+    if args.command in (
+        "review-project",
+        "review-area",
+        "review-resource",
+        "review-reference",
+        "review-meeting",
+    ):
         _, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]
         request = ReviewRequest(title=args.title, actor=Actor.HUMAN, since=args.since)
