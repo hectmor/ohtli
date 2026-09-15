@@ -15,7 +15,8 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA
+from ohtli.execution.specs import AREA, RESOURCE
+from ohtli.domain.resource import Resource
 from ohtli.vault_io.events import read_events
 from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.review import ReviewConclusion
@@ -759,3 +760,100 @@ def test_execute_knowledge_enriches_a_second_domain_object(tmp_path):
 
     assert result.applicable
     assert result.event.event_type == "Area Knowledge Enriched"
+
+
+def test_execute_capture_and_reactivate_work_for_resource(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="A Guide", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert captured.applicable
+    assert isinstance(captured.project, Resource)
+    assert captured.event.event_type == "Resource Created"
+
+    archived = execute_archive(
+        ArchiveRequest(title="A Guide", actor=Actor.DETERMINISTIC),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert archived.applicable
+    assert archived.event.event_type == "Resource Archived"
+
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="A Guide", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert reactivated.applicable
+    assert reactivated.event.event_type == "Resource Reactivated"
+
+
+def test_execute_review_works_for_resource(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Reviewable Resource", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Reviewable Resource", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
+    assert result.event.event_type == "Resource Insufficient Assessment Basis Identified"
+
+
+def test_execute_knowledge_works_for_resource(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Enrichable Resource", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Enrichable Resource",
+            understanding_title="Refined Understanding",
+            understanding="A clearer explanation of the concept.",
+            provenance=("New Reference",),
+            actor=Actor.HUMAN,
+        ),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.event.event_type == "Resource Knowledge Enriched"
+
+
+def test_execute_evaluation_is_never_applicable_for_resource(tmp_path):
+    """Resource is not an Execution target (execution-workflow.md):
+    every OperationalResult value must be rejected, not just one."""
+    execute_capture(
+        ExecutionRequest(title="Not An Execution Target", actor=Actor.HUMAN),
+        spec=RESOURCE,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    for result_value in OperationalResult:
+        result = execute_evaluation(
+            EvaluationRequest(
+                title="Not An Execution Target", result=result_value, actor=Actor.HUMAN
+            ),
+            spec=RESOURCE,
+            base_dir=tmp_path,
+            events_dir=tmp_path,
+        )
+        assert not result.applicable, f"{result_value} must not be applicable for Resource"
