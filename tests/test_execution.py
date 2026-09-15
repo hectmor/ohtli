@@ -15,7 +15,8 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, REFERENCE, RESOURCE
+from ohtli.execution.specs import AREA, MEETING, REFERENCE, RESOURCE
+from ohtli.domain.meeting import Meeting
 from ohtli.domain.reference import Reference
 from ohtli.domain.resource import Resource
 from ohtli.vault_io.events import read_events
@@ -991,3 +992,131 @@ def test_execute_knowledge_currently_succeeds_for_reference_despite_not_being_a_
         "Domain Objects; this must stay true until a future phase adds one deliberately"
     )
     assert result.event.event_type == "Reference Knowledge Enriched"
+
+
+def test_execute_capture_and_reactivate_work_for_meeting(tmp_path):
+    captured = execute_capture(
+        ExecutionRequest(title="Weekly Sync", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert captured.applicable
+    assert isinstance(captured.project, Meeting)
+    assert captured.event.event_type == "Meeting Created"
+
+    archived = execute_archive(
+        ArchiveRequest(title="Weekly Sync", actor=Actor.DETERMINISTIC),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert archived.applicable
+    assert archived.event.event_type == "Meeting Archived"
+
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="Weekly Sync", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    assert reactivated.applicable
+    assert reactivated.event.event_type == "Meeting Reactivated"
+
+
+def test_execute_processing_carries_inbox_content_into_meeting_discussion(tmp_path):
+    entry_path = tmp_path / "raw-entry.md"
+    entry_path.write_text(
+        "Quick Standup Notes\n\nAgreed to ship the fix by Friday.\n",
+        encoding="utf-8",
+    )
+
+    result = execute_processing(
+        ProcessingRequest(entry_path=entry_path, actor=Actor.DETERMINISTIC),
+        spec=MEETING,
+        base_dir=tmp_path / "meetings",
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert isinstance(result.project, Meeting)
+    assert result.project.title == "Quick Standup Notes"
+    assert result.event.event_type == "Meeting Created"
+    assert result.event.workflow == "processing"
+
+    body = result.path.read_text(encoding="utf-8")
+    assert "Agreed to ship the fix by Friday." in body
+    assert "## Discussion\n\nAgreed to ship the fix by Friday." in body
+    assert not entry_path.exists(), "a processed Inbox entry must be resolved"
+
+
+def test_execute_review_works_for_meeting(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="Reviewable Meeting", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="Reviewable Meeting", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
+    assert result.event.event_type == "Meeting Insufficient Assessment Basis Identified"
+
+
+def test_execute_evaluation_is_never_applicable_for_meeting(tmp_path):
+    """Meeting is not an Execution target (execution-workflow.md):
+    every OperationalResult value must be rejected, not just one."""
+    execute_capture(
+        ExecutionRequest(title="Coordination Only", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    for result_value in OperationalResult:
+        result = execute_evaluation(
+            EvaluationRequest(title="Coordination Only", result=result_value, actor=Actor.HUMAN),
+            spec=MEETING,
+            base_dir=tmp_path,
+            events_dir=tmp_path,
+        )
+        assert not result.applicable, f"{result_value} must not be applicable for Meeting"
+
+
+def test_execute_knowledge_currently_succeeds_for_meeting_despite_not_being_a_spec_target(tmp_path):
+    """Same documented, accepted gap as Reference (Phase 19):
+    knowledge-workflow.md names Meeting only as a source, never an
+    Externalize target, but execute_knowledge() has no structural
+    guard against this -- excluded only by CLI omission."""
+    execute_capture(
+        ExecutionRequest(title="Enrichable Meeting Despite The Spec", actor=Actor.HUMAN),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="Enrichable Meeting Despite The Spec",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        spec=MEETING,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, (
+        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
+        "Domain Objects; this must stay true until a future phase adds one deliberately"
+    )
+    assert result.event.event_type == "Meeting Knowledge Enriched"

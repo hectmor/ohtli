@@ -43,6 +43,10 @@ def write_reference(representation: dict[str, Any], *, base_dir: Path | None = N
     return _write_note(representation, paths.reference_file_path, base_dir=base_dir)
 
 
+def write_meeting(representation: dict[str, Any], *, base_dir: Path | None = None) -> Path:
+    return _write_note(representation, paths.meeting_file_path, base_dir=base_dir)
+
+
 def rewrite_note(path: Path, representation: dict[str, Any]) -> Path:
     """Rewrite a note's Current Representation at its existing path.
 
@@ -74,6 +78,7 @@ read_project = read_note
 read_area = read_note
 read_resource = read_note
 read_reference = read_note
+read_meeting = read_note
 
 
 def _list_existing_titles(directory: Path) -> set[str]:
@@ -115,6 +120,11 @@ def list_existing_resource_titles(*, base_dir: Path | None = None) -> set[str]:
 
 def list_existing_reference_titles(*, base_dir: Path | None = None) -> set[str]:
     directory = base_dir if base_dir is not None else paths.REFERENCES_DIR
+    return _list_existing_titles(directory)
+
+
+def list_existing_meeting_titles(*, base_dir: Path | None = None) -> set[str]:
+    directory = base_dir if base_dir is not None else paths.MEETINGS_DIR
     return _list_existing_titles(directory)
 
 

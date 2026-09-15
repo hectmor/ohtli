@@ -9,6 +9,7 @@ PROJECTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vaul
 AREAS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "areas"
 RESOURCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "resources"
 REFERENCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "references"
+MEETINGS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "meetings"
 INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 EVENTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / ".ohtli"
 
@@ -38,6 +39,10 @@ def resource_file_path(title: str, base_dir: Path | None = None) -> Path:
 
 def reference_file_path(title: str, base_dir: Path | None = None) -> Path:
     return _note_file_path(title, REFERENCES_DIR, base_dir)
+
+
+def meeting_file_path(title: str, base_dir: Path | None = None) -> Path:
+    return _note_file_path(title, MEETINGS_DIR, base_dir)
 
 
 def events_file_path(base_dir: Path | None = None) -> Path:
