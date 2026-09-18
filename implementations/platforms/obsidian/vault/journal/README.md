@@ -8,10 +8,12 @@ Entries are organized chronologically.
 
 ## What belongs here
 
-- Daily notes
+- Daily notes (`daily/`, managed by the Obsidian Daily Notes plugin)
 - Weekly notes
-- Meeting logs
+- Journal entries (`entries/`)
 - Observations
+
+Meetings are their own Domain Object and live in `meetings/`, not here.
 
 ## Workflow
 

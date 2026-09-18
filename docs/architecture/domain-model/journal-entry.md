@@ -23,3 +23,8 @@ time.
 ## Lifecycle
 
 Created.
+
+Contextual presence (Operational vs. Historical) is a separate
+dimension, independent from Lifecycle, defined by the Archive Workflow
+(`Lifecycle Independence`, `archive-workflow.md`). It is not a
+Lifecycle value.

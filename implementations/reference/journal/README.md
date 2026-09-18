@@ -7,12 +7,13 @@ Maintain chronological records of work and observations.
 ## Contains
 
 * Daily notes
-* Meeting notes
+* Journal entries
 * Progress logs
 
 ## Does Not Contain
 
 * Permanent documentation
 * Project specifications
+* Meeting notes (Meeting is its own Domain Object)
 
 Journal entries provide historical context.

@@ -10,6 +10,11 @@ AREAS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" 
 RESOURCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "resources"
 REFERENCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "references"
 MEETINGS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "meetings"
+# Deliberately `journal/entries`, never `journal/daily`: the latter is owned by
+# the user's Obsidian Daily Notes plugin (`.obsidian/daily-notes.json`).
+JOURNAL_ENTRIES_DIR = (
+    _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "journal" / "entries"
+)
 INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 EVENTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / ".ohtli"
 
@@ -43,6 +48,10 @@ def reference_file_path(title: str, base_dir: Path | None = None) -> Path:
 
 def meeting_file_path(title: str, base_dir: Path | None = None) -> Path:
     return _note_file_path(title, MEETINGS_DIR, base_dir)
+
+
+def journal_entry_file_path(title: str, base_dir: Path | None = None) -> Path:
+    return _note_file_path(title, JOURNAL_ENTRIES_DIR, base_dir)
 
 
 def events_file_path(base_dir: Path | None = None) -> Path:
