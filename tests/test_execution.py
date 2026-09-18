@@ -15,7 +15,8 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, MEETING, REFERENCE, RESOURCE
+from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, REFERENCE, RESOURCE
+from ohtli.domain.journal_entry import JournalEntry
 from ohtli.domain.meeting import Meeting
 from ohtli.domain.reference import Reference
 from ohtli.domain.resource import Resource
@@ -1120,3 +1121,188 @@ def test_execute_knowledge_currently_succeeds_for_meeting_despite_not_being_a_sp
         "Domain Objects; this must stay true until a future phase adds one deliberately"
     )
     assert result.event.event_type == "Meeting Knowledge Enriched"
+
+
+def test_execute_capture_journal_entry_with_a_date_title_for_both_actors(tmp_path):
+    human = execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    deterministic = execute_capture(
+        ExecutionRequest(title="2026-07-30", actor=Actor.DETERMINISTIC),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert human.applicable and deterministic.applicable
+    assert isinstance(human.project, JournalEntry)
+    assert human.path.name == "2026-07-29.md"
+    assert human.event.event_type == "JournalEntry Created"
+    assert deterministic.event.actor == "deterministic"
+
+
+def test_capture_rejects_a_second_journal_entry_for_the_same_moment(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    duplicate = execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert not duplicate.applicable
+    assert duplicate.event is None
+
+
+def test_journal_entry_and_project_do_not_share_an_applicability_namespace(tmp_path):
+    project = execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        base_dir=tmp_path / "projects",
+        events_dir=tmp_path,
+    )
+    entry = execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path / "entries",
+        events_dir=tmp_path,
+    )
+
+    assert project.applicable and entry.applicable
+
+
+def test_execute_processing_carries_inbox_content_into_journal_entry_notes(tmp_path):
+    for actor, name in ((Actor.HUMAN, "human"), (Actor.DETERMINISTIC, "deterministic")):
+        entry_path = tmp_path / f"raw-{name}.md"
+        entry_path.write_text(
+            f"Pensamiento {name}\n\nMe di cuenta de que conviene escribir menos y revisar más.\n",
+            encoding="utf-8",
+        )
+
+        result = execute_processing(
+            ProcessingRequest(entry_path=entry_path, actor=actor),
+            spec=JOURNAL_ENTRY,
+            base_dir=tmp_path / "entries",
+            events_dir=tmp_path,
+        )
+
+        assert result.applicable
+        assert isinstance(result.project, JournalEntry)
+        assert result.event.event_type == "JournalEntry Created"
+        assert result.event.workflow == "processing"
+        body = result.path.read_text(encoding="utf-8")
+        assert "## Notes\n\nMe di cuenta de que conviene escribir menos y revisar más." in body
+        assert not entry_path.exists(), "a processed Inbox entry must be resolved"
+
+
+def test_execute_archive_and_reactivate_work_for_journal_entry(tmp_path):
+    execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    archived = execute_archive(
+        ArchiveRequest(title="2026-07-29", actor=Actor.DETERMINISTIC),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+    reactivated = execute_reactivate(
+        ArchiveRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert archived.applicable
+    assert archived.event.event_type == "JournalEntry Archived"
+    assert reactivated.applicable
+    assert reactivated.event.event_type == "JournalEntry Reactivated"
+
+
+def test_execute_evaluation_is_never_applicable_for_journal_entry(tmp_path):
+    """Journal Entry is not an Execution target (execution-workflow.md):
+    every OperationalResult value must be rejected, not just one."""
+    execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    for result_value in OperationalResult:
+        result = execute_evaluation(
+            EvaluationRequest(title="2026-07-29", result=result_value, actor=Actor.HUMAN),
+            spec=JOURNAL_ENTRY,
+            base_dir=tmp_path,
+            events_dir=tmp_path,
+        )
+        assert not result.applicable, f"{result_value} must not be applicable for Journal Entry"
+
+
+def test_execute_knowledge_currently_succeeds_for_journal_entry_despite_not_being_a_spec_target(tmp_path):
+    """Documented, accepted gap (same as Reference/Meeting):
+    knowledge-workflow.md names Journal Entry only as a source, never
+    an Externalize target, but execute_knowledge() has no structural
+    guard -- excluded only by CLI omission (no enrich-journal-entry)."""
+    execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_knowledge(
+        KnowledgeRequest(
+            title="2026-07-29",
+            understanding_title="F",
+            understanding="T",
+            provenance=("S",),
+            actor=Actor.HUMAN,
+        ),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, (
+        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
+        "Domain Objects; this must stay true until a future phase adds one deliberately"
+    )
+    assert result.event.event_type == "JournalEntry Knowledge Enriched"
+
+
+def test_execute_review_currently_succeeds_for_journal_entry_despite_being_context_not_subject(tmp_path):
+    """Documented, accepted gap: review-workflow.md treats a Journal
+    Entry as context for a broader Review, not a Review subject, but
+    execute_review() is type-agnostic -- excluded only by CLI omission
+    (no review-journal-entry)."""
+    execute_capture(
+        ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    result = execute_review(
+        ReviewRequest(title="2026-07-29", actor=Actor.HUMAN),
+        spec=JOURNAL_ENTRY,
+        base_dir=tmp_path,
+        events_dir=tmp_path,
+    )
+
+    assert result.applicable, (
+        "known gap: execute_review has no structural guard against non-subject Domain Objects; "
+        "this must stay true until a future phase adds one deliberately"
+    )
+    assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
+    assert result.event.event_type == "JournalEntry Insufficient Assessment Basis Identified"

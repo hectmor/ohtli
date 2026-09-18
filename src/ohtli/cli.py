@@ -19,7 +19,7 @@ from ohtli.execution.execution import (
     execute_reactivate,
     execute_review,
 )
-from ohtli.execution.specs import AREA, MEETING, PROJECT, REFERENCE, RESOURCE
+from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 
@@ -43,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
     create_meeting = subparsers.add_parser("create-meeting", help="Capture a new Meeting")
     create_meeting.add_argument("title")
 
+    create_journal_entry = subparsers.add_parser(
+        "create-journal-entry", help="Capture a new Journal Entry (title conventionally its moment)"
+    )
+    create_journal_entry.add_argument("title")
+
     subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
 
     archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
@@ -60,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     archive_meeting = subparsers.add_parser("archive-meeting", help="Archive a Meeting")
     archive_meeting.add_argument("title")
 
+    archive_journal_entry = subparsers.add_parser(
+        "archive-journal-entry", help="Archive a Journal Entry"
+    )
+    archive_journal_entry.add_argument("title")
+
     reactivate_project = subparsers.add_parser("reactivate-project", help="Reactivate a Project")
     reactivate_project.add_argument("title")
 
@@ -74,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
 
     reactivate_meeting = subparsers.add_parser("reactivate-meeting", help="Reactivate a Meeting")
     reactivate_meeting.add_argument("title")
+
+    reactivate_journal_entry = subparsers.add_parser(
+        "reactivate-journal-entry", help="Reactivate a Journal Entry"
+    )
+    reactivate_journal_entry.add_argument("title")
 
     evaluate_project = subparsers.add_parser(
         "evaluate-project", help="Record the operational result of work performed on a Project"
@@ -139,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         "resource": RESOURCE,
         "reference": REFERENCE,
         "meeting": MEETING,
+        "journal-entry": JOURNAL_ENTRY,
     }
 
     if args.command == "create-project":
@@ -177,6 +193,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
+    if args.command == "create-journal-entry":
+        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        result = execute_capture(request, spec=JOURNAL_ENTRY)
+        if not result.applicable:
+            print(f"Not applicable: a Journal Entry titled '{args.title}' already exists.")
+            return 1
+        print(f"Captured Journal Entry '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
     if args.command == "create-meeting":
         request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
         result = execute_capture(request, spec=MEETING)
@@ -207,11 +232,13 @@ def main(argv: list[str] | None = None) -> int:
         "archive-resource",
         "archive-reference",
         "archive-meeting",
+        "archive-journal-entry",
         "reactivate-project",
         "reactivate-area",
         "reactivate-resource",
         "reactivate-reference",
         "reactivate-meeting",
+        "reactivate-journal-entry",
     ):
         operation, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]

@@ -18,6 +18,7 @@ Additional properties depend on the note type.
 ```
 Common
 ├── Daily Note
+├── Journal Entry
 ├── Project
 ├── Area
 ├── Resource

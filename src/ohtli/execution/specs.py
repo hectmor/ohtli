@@ -5,12 +5,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ohtli.domain.area import Area
+from ohtli.domain.journal_entry import JournalEntry
 from ohtli.domain.meeting import Meeting
 from ohtli.domain.project import Project
 from ohtli.domain.reference import Reference
 from ohtli.domain.resource import Resource
 from ohtli.representation.area import from_representation as area_from_representation
 from ohtli.representation.area import to_representation as area_to_representation
+from ohtli.representation.journal_entry import from_representation as journal_entry_from_representation
+from ohtli.representation.journal_entry import to_representation as journal_entry_to_representation
 from ohtli.representation.meeting import from_representation as meeting_from_representation
 from ohtli.representation.meeting import to_representation as meeting_to_representation
 from ohtli.representation.project import from_representation as project_from_representation
@@ -22,16 +25,19 @@ from ohtli.representation.resource import to_representation as resource_to_repre
 from ohtli.vault_io import paths
 from ohtli.vault_io.markdown import (
     list_existing_area_titles,
+    list_existing_journal_entry_titles,
     list_existing_meeting_titles,
     list_existing_reference_titles,
     list_existing_resource_titles,
     list_existing_titles,
     read_area,
+    read_journal_entry,
     read_meeting,
     read_project,
     read_reference,
     read_resource,
     write_area,
+    write_journal_entry,
     write_meeting,
     write_project,
     write_reference,
@@ -132,5 +138,18 @@ MEETING = DomainSpec(
     list_existing_titles=list_existing_meeting_titles,
     # Meeting may participate in Execution through coordination but is
     # not itself an execution target (execution-workflow.md).
+    allowed_results=frozenset(),
+)
+
+JOURNAL_ENTRY = DomainSpec(
+    domain_type=JournalEntry,
+    to_representation=journal_entry_to_representation,
+    from_representation=journal_entry_from_representation,
+    write=write_journal_entry,
+    read=read_journal_entry,
+    file_path=paths.journal_entry_file_path,
+    list_existing_titles=list_existing_journal_entry_titles,
+    # Journal Entry is not an Execution target (execution-workflow.md's
+    # Related Domain Objects list).
     allowed_results=frozenset(),
 )
