@@ -24,8 +24,11 @@ class RelationshipDefinition:
 # `processing-workflow.md`, "Interaction Constrained": Processing may
 # establish only relationships already defined by the Interaction Model.
 # This table is that constraint made structural. Implemented so far:
-# `Project belongs to Area (0..1)` and the first `0..*` relationships,
-# `Project references Resource|Reference`.
+# `Project belongs to Area (0..1)` and every `references` relationship
+# (all `0..*`). Not yet implemented: `supports` and `contains`.
+#
+# Type names are the Domain classes' `__name__` (`JournalEntry`, not
+# "Journal Entry"): that is what Execution and the CLI look up.
 #
 # Every ordered (source type, target type) pair in the Interaction Model
 # has exactly one relationship type (verified across all 16 canonical
@@ -35,6 +38,13 @@ CANONICAL_RELATIONSHIPS: tuple[RelationshipDefinition, ...] = (
     RelationshipDefinition("Project", "belongs to", "Area", 1),
     RelationshipDefinition("Project", "references", "Resource", None),
     RelationshipDefinition("Project", "references", "Reference", None),
+    RelationshipDefinition("Project", "references", "JournalEntry", None),
+    RelationshipDefinition("Resource", "references", "Reference", None),
+    RelationshipDefinition("Meeting", "references", "Reference", None),
+    RelationshipDefinition("Meeting", "references", "Resource", None),
+    RelationshipDefinition("JournalEntry", "references", "Project", None),
+    RelationshipDefinition("JournalEntry", "references", "Area", None),
+    RelationshipDefinition("JournalEntry", "references", "Resource", None),
 )
 
 

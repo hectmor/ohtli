@@ -18,6 +18,11 @@ relationships:
   target_id: 4c2dffdc-4a5a-4c63-afff-171313f8cab4
   target_type: resource
   target_link: '[[resources/demo-resource-slice|Demo Resource Slice]]'
+- id: 6aa8ccbe-6b91-443f-92b6-b75b1bfeba2b
+  type: references
+  target_id: 685e0dd7-abb9-434a-a023-26b87821188e
+  target_type: journal_entry
+  target_link: '[[journal/entries/demo-inbox-journal-entry|Demo Inbox Journal Entry]]'
 ---
 
 # Demo Relationship Project

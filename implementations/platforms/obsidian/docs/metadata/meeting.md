@@ -16,6 +16,7 @@ Meeting notes document conversations and decisions.
 | attendees | List | No |
 | meeting_date | Date | Yes |
 | location | Text | No |
+| relationships | List | No |
 
 `id` is a stable identifier assigned at Capture. It exists so that
 identity survives rename and relocation, per the canonical
@@ -27,6 +28,14 @@ must not be recomputed if either changes.
 presence (operational vs. historical), set by the Archive workflow,
 not lifecycle. Per `archive-workflow.md`'s Lifecycle Independence
 invariant, Archive/Reactivate must never change `status`.
+
+`relationships` is the Meeting's Current Relationship Set: a list of
+Relationship Instances, **absent until the first link**. Its authority is
+the canonical **Interaction Model**, not this metadata schema. This
+document only records which implemented relationships this note type
+holds as a **source**: `Meeting references Reference (0..*)` and `Meeting references Resource (0..*)`. Instance fields, identity, uniqueness, and
+unlink rules are the same for every source type and are described once in
+`project.md` ("`relationships`").
 
 ## Status values
 
