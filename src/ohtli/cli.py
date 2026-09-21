@@ -62,7 +62,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     create_journal_entry.add_argument("title")
 
-    subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
+    process_inbox = subparsers.add_parser("process-inbox", help="Process all raw Inbox entries")
+    process_inbox.add_argument(
+        "--as",
+        dest="kind",
+        choices=list(spec_by_kind),
+        default="project",
+        help="Domain Object every entry in this run becomes (default: project)",
+    )
 
     archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
     archive_project.add_argument("title")
@@ -329,11 +336,12 @@ def main(argv: list[str] | None = None) -> int:
 
         for entry_path in entries:
             request = ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN)
-            result = execute_processing(request)
+            result = execute_processing(request, spec=spec_by_kind[args.kind])
             if not result.applicable:
                 print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.")
                 continue
-            print(f"Processed Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            label = args.kind.replace("-", " ").title()
+            print(f"Processed {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
     if args.command in (

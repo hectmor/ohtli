@@ -18,6 +18,8 @@ published:
 
 ## Examples
 
+## Notes
+
 ## References
 
 ## Related Notes
