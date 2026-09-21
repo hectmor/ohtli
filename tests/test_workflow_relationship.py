@@ -25,12 +25,14 @@ def test_the_canonical_table_holds_exactly_the_implemented_relationships():
         ("Reference", "supports", "Resource", None),
         ("Resource", "supports", "Project", None),
         ("Meeting", "supports", "Project", 1),
+        ("Project", "contains", "Meeting", None),
     }
 
 
 def test_only_relationships_the_interaction_model_defines_are_known():
     assert processing.relationship_definition("Project", "belongs to") is not None
-    assert processing.relationship_definition("Project", "contains") is None, "Project contains Meeting is canonical but not implemented yet"
+    assert processing.relationship_definition("Project", "contains") is not None
+    assert processing.relationship_definition("Project", "supports") is None, "the Interaction Model defines no Project supports"
     assert processing.relationship_definition("Area", "belongs to") is None
     assert processing.relationship_definition("Project", "relates to") is None, "generic types are not allowed"
 
@@ -94,8 +96,9 @@ def test_the_relationship_type_is_derived_from_the_ordered_pair():
     assert processing.relationship_for_pair("Project", "Area").relationship_type == "belongs to"
     assert processing.relationship_for_pair("Project", "Resource").relationship_type == "references"
     assert processing.relationship_for_pair("Project", "Reference").relationship_type == "references"
-    assert processing.relationship_for_pair("Area", "Project") is None, "the inverse is not implemented"
-    assert processing.relationship_for_pair("Project", "Meeting") is None
+    assert processing.relationship_for_pair("Area", "Project") is None, "Area contains Project is derived, never linkable"
+    assert processing.relationship_for_pair("Project", "Meeting").relationship_type == "contains"
+    assert processing.relationship_for_pair("Meeting", "Area") is None, "no relationship is defined between these types"
 
 
 def test_every_ordered_pair_in_the_table_is_unique():
@@ -156,18 +159,40 @@ def test_every_implemented_references_relationship_is_unbounded():
     assert all(d.max_targets is None for d in references)
 
 
-def test_every_relationship_type_but_contains_is_implemented():
-    """Only `contains` is deliberately left out: `Area contains Project` and
-    `Project contains Meeting` live on a different note from `belongs to` /
-    `supports` and could contradict them, so they need a design decision."""
+def test_every_relationship_type_is_implemented():
+    """All four relationship types the Interaction Model defines. `contains` is
+    stored for `Project contains Meeting` and derived for `Area contains Project`."""
     implemented_types = {d.relationship_type for d in processing.CANONICAL_RELATIONSHIPS}
+    implemented_types |= {d.relationship_type for d in processing.DERIVED_RELATIONSHIPS}
 
-    assert implemented_types == {"belongs to", "references", "supports"}
+    assert implemented_types == {"belongs to", "references", "supports", "contains"}
 
 
-def test_the_contains_pairs_are_still_not_implemented():
-    for source, target in (("Area", "Project"), ("Project", "Meeting")):
-        assert processing.relationship_for_pair(source, target) is None, f"{source} -> {target}"
+def test_area_contains_project_is_derived_and_never_linkable():
+    derived = processing.derived_relationship_for_pair("Area", "Project")
+
+    assert derived is not None and derived.relationship_type == "contains"
+    assert (derived.via.source_type, derived.via.relationship_type, derived.via.target_type) == (
+        "Project",
+        "belongs to",
+        "Area",
+    )
+    assert processing.relationship_for_pair("Area", "Project") is None
+    assert processing.relationship_definition("Area", "contains") is None
+
+
+def test_project_contains_meeting_is_stored_not_derived():
+    """The spec does not declare it complementary to `Meeting supports Project`."""
+    assert processing.derived_relationship_for_pair("Project", "Meeting") is None
+    definition = processing.relationship_for_pair("Project", "Meeting")
+    assert (definition.relationship_type, definition.max_targets) == ("contains", None)
+
+
+def test_a_derived_pair_is_never_also_a_stored_pair():
+    stored = {(d.source_type, d.target_type) for d in processing.CANONICAL_RELATIONSHIPS}
+    derived = {(d.source_type, d.target_type) for d in processing.DERIVED_RELATIONSHIPS}
+
+    assert not stored & derived
 
 
 def test_only_meeting_supports_project_is_bounded_to_one_target():
@@ -231,3 +256,46 @@ def test_every_type_name_in_the_table_is_a_real_domain_class_name():
     }
 
     assert used <= real, f"not a Domain class name: {sorted(used - real)}"
+
+
+_INTERACTION_MODEL = Path(__file__).resolve().parents[1] / "docs" / "architecture" / "interaction-model"
+_RELATIONSHIP_TYPES = {"belongs to", "references", "supports", "contains"}
+
+
+def _spec_relationships():
+    """Every relationship the Interaction Model documents define, read from the
+    documents themselves (so this check cannot share a typo with the table).
+    Returns {(source, type, target): max_targets}."""
+    found = {}
+    for path in sorted(_INTERACTION_MODEL.glob("*.md")):
+        if path.name == "README.md":
+            continue
+        source = path.stem.title().replace("-", "")
+        current = None
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if line in _RELATIONSHIP_TYPES:
+                current = line
+            elif line.startswith("- ") and current is not None:
+                name, _, cardinality = line[2:].partition(" (")
+                found[(source, current, name.replace(" ", ""))] = 1 if cardinality.startswith("0..1") else None
+            elif line.startswith("#"):
+                current = None
+    return found
+
+
+def test_every_canonical_relationship_is_stored_or_derived():
+    """Nothing the Interaction Model defines is left unimplemented, and the code
+    defines nothing the Interaction Model does not."""
+    spec = _spec_relationships()
+    stored = {
+        (d.source_type, d.relationship_type, d.target_type): d.max_targets
+        for d in processing.CANONICAL_RELATIONSHIPS
+    }
+    derived = {(d.source_type, d.relationship_type, d.target_type) for d in processing.DERIVED_RELATIONSHIPS}
+
+    assert len(spec) == 16, f"expected 16 canonical relationships in the Interaction Model, read {len(spec)}"
+    assert set(stored) | derived == set(spec)
+    assert not set(stored) & derived
+    for key, max_targets in stored.items():
+        assert spec[key] == max_targets, f"cardinality of {key} differs from the Interaction Model"

@@ -36,10 +36,18 @@ Relationship State). Its authority is the canonical **Interaction
 Model**, not this metadata schema: metadata creates no relationship
 meaning, direction, or cardinality (`metadata-model/README.md`). This
 document only records how the implemented canonical relationships are
-stored: `Project belongs to Area (0..1)` and `Project references
-Resource|Reference|Journal Entry (0..*)`. The other note types that hold
-relationships as a source (Resource, Reference, Meeting, Journal Entry) use
-this same shape; see their own metadata documents.
+stored: `Project belongs to Area (0..1)`, `Project references
+Resource|Reference|Journal Entry (0..*)`, and `Project contains Meeting
+(0..*)`. The other note types that hold relationships as a source
+(Resource, Reference, Meeting, Journal Entry) use this same shape; see
+their own metadata documents.
+
+`Project contains Meeting` is stored on the Project like the others. The
+Interaction Model does not declare it complementary to `Meeting supports
+Project (0..1)`, so the two are independent: a Project may contain a
+Meeting that supports a different Project, and nothing reconciles them.
+`Area contains Project`, by contrast, is not stored anywhere; see
+`area.md`.
 
 Each entry has:
 

@@ -138,6 +138,54 @@ def list_existing_journal_entry_titles(*, base_dir: Path | None = None) -> set[s
     return _list_existing_titles(directory)
 
 
+def _list_notes_linking_to(directory: Path, target_id: str, relationship_type: str) -> list[dict[str, Any]]:
+    """The notes in a directory whose Current Relationship Set holds a
+    `relationship_type` instance pointing at `target_id`.
+
+    This is how a *derived* relationship is read (`Area contains Project` is
+    the Projects whose `belongs to` targets the Area): nothing is stored on the
+    target, so nothing can go stale or contradict the source. Read directly from
+    the vault on every call; it writes nothing.
+
+    Notes without frontmatter (navigation notes) are skipped, as in
+    `_list_existing_titles`. Sorted by title so the result is deterministic.
+    """
+    if not directory.exists():
+        return []
+
+    found = []
+    for md_file in directory.glob("*.md"):
+        if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+            continue
+        representation = read_note(md_file)
+        properties = representation["properties"] or {}
+        entries = properties.get("relationships") or []
+        if not any(
+            isinstance(entry, dict)
+            and entry.get("type") == relationship_type
+            and entry.get("target_id") == target_id
+            for entry in entries
+        ):
+            continue
+        found.append(
+            {
+                "id": properties.get("id"),
+                "title": representation["title"],
+                "status": properties.get("status"),
+                "context": properties.get("context"),
+                "path": md_file,
+            }
+        )
+    return sorted(found, key=lambda note: note["title"])
+
+
+def list_projects_linking_to(
+    target_id: str, relationship_type: str, *, base_dir: Path | None = None
+) -> list[dict[str, Any]]:
+    directory = base_dir if base_dir is not None else paths.PROJECTS_DIR
+    return _list_notes_linking_to(directory, target_id, relationship_type)
+
+
 def list_inbox_entries(*, base_dir: Path | None = None) -> list[Path]:
     """The raw, unprocessed Inbox entries.
 

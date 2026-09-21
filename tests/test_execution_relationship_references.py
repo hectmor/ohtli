@@ -225,18 +225,15 @@ def _refused(tmp_path, source, target, relationship_type):
     assert src.path.read_bytes() == before
 
 
-@pytest.mark.parametrize(
-    "source,target",
-    [
-        pytest.param(AREA, PROJECT, id="area-project"),
-        pytest.param(PROJECT, MEETING, id="project-meeting"),
-    ],
-)
 @pytest.mark.parametrize("relationship_type", ["references", "supports", "contains", "belongs to"])
-def test_the_contains_pairs_are_still_refused_for_every_relationship_type(
-    tmp_path, source, target, relationship_type
-):
-    _refused(tmp_path, source, target, relationship_type)
+def test_area_contains_project_is_refused_for_every_relationship_type(tmp_path, relationship_type):
+    """Derived from `Project belongs to Area`: it can never be established."""
+    _refused(tmp_path, AREA, PROJECT, relationship_type)
+
+
+@pytest.mark.parametrize("relationship_type", ["references", "supports", "belongs to"])
+def test_project_contains_meeting_is_refused_for_any_type_other_than_contains(tmp_path, relationship_type):
+    _refused(tmp_path, PROJECT, MEETING, relationship_type)
 
 
 @pytest.mark.parametrize(

@@ -22,11 +22,12 @@ from ohtli.execution.execution import (
     execute_relate,
     execute_review,
     execute_unrelate,
+    read_contained_projects,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
-from ohtli.workflow.processing import relationship_for_pair
+from ohtli.workflow.processing import derived_relationship_for_pair, relationship_for_pair
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -172,6 +173,12 @@ def main(argv: list[str] | None = None) -> int:
     unlink.add_argument("--to-type", required=True, choices=list(spec_by_kind))
     unlink.add_argument("--to", dest="to_title", default=None)
 
+    contains = subparsers.add_parser(
+        "contains",
+        help="List the Projects an Area contains (derived from each Project's 'belongs to'; nothing is stored)",
+    )
+    contains.add_argument("area")
+
     enrich_project = subparsers.add_parser(
         "enrich-project", help="Enrich a Project with Developed Understanding"
     )
@@ -234,12 +241,37 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
 
+    if args.command == "contains":
+        result = read_contained_projects(args.area)
+        if not result.applicable:
+            print(f"Not applicable: no Area titled '{args.area}'.")
+            return 1
+        if not result.projects:
+            print(f"Area '{args.area}' contains no Projects.")
+            return 0
+        print(f"Area '{args.area}' contains {len(result.projects)} Project(s):")
+        for project in result.projects:
+            historical = " [historical]" if project["context"] == "historical" else ""
+            print(f"  {project['title']}{historical} (status={project['status']}, id={project['id']})")
+        return 0
+
     if args.command in ("link", "unlink"):
         source_spec = spec_by_kind[args.from_type]
         target_spec = spec_by_kind[args.to_type]
-        definition = relationship_for_pair(
-            source_spec.domain_type.__name__, target_spec.domain_type.__name__
-        )
+        source_type = source_spec.domain_type.__name__
+        target_type = target_spec.domain_type.__name__
+        derived = derived_relationship_for_pair(source_type, target_type)
+        if derived is not None:
+            via = derived.via
+            print(
+                f"'{source_type} {derived.relationship_type} {target_type}' is derived from "
+                f"'{via.source_type} {via.relationship_type} {via.target_type}' and is never "
+                f"established directly. Use: ohtli {args.command} --from-type {via.source_type.lower()} "
+                f"--from <{via.source_type.lower()}> --to-type {via.target_type.lower()} "
+                f"--to <{via.target_type.lower()}>; read it with: ohtli contains <area>."
+            )
+            return 1
+        definition = relationship_for_pair(source_type, target_type)
         if definition is None:
             print(
                 f"No canonical relationship is implemented from '{args.from_type}' "
