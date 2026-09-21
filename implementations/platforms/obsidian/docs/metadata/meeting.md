@@ -36,9 +36,14 @@ document only records which implemented relationships this note type
 holds as a **source**: `Meeting references Reference (0..*)`,
 `Meeting references Resource (0..*)`, and `Meeting supports Project (0..1)`.
 The last is bounded: a Meeting supports at most one Project, so a second
-link is refused, and it may be unlinked without naming the Project. Instance fields, identity, uniqueness, and
-unlink rules are the same for every source type and are described once in
-`project.md` ("`relationships`").
+link is refused, and it may be unlinked without naming the Project.
+Instance fields, identity, uniqueness, and unlink rules are the same for
+every source type and are described once in `project.md`
+("`relationships`").
+
+`Project contains Meeting (0..*)` is stored on the **Project**, not on the
+Meeting. It is independent of `Meeting supports Project`: the two may name
+different Projects.
 
 ## Status values
 

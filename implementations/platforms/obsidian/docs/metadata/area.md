@@ -27,6 +27,18 @@ presence (operational vs. historical), set by the Archive workflow,
 not lifecycle. Per `archive-workflow.md`'s Lifecycle Independence
 invariant, Archive/Reactivate must never change `status`.
 
+An Area has **no** `relationships` property. `Area contains Project (0..*)`
+is the complement of `Project belongs to Area (0..1)`, which the Interaction
+Model ("Relationship Semantics and Inverses") calls semantically
+complementary and does not require to be a separate stored relationship.
+This implementation therefore derives it: the Projects an Area contains are
+the Projects whose `belongs to` targets this Area's `id`. Nothing is written
+to the Area, so the view cannot go stale or contradict the Project side, and
+it cannot be established from the Area (`ohtli link --from-type area ...` is
+refused and points to the Project side). Read it with `ohtli contains
+<area>`; archived (historical) Projects are included, marked as such,
+because Archive does not cascade.
+
 ## Status values
 
 - active

@@ -23,10 +23,12 @@ class RelationshipDefinition:
 
 # `processing-workflow.md`, "Interaction Constrained": Processing may
 # establish only relationships already defined by the Interaction Model.
-# This table is that constraint made structural. Implemented so far:
-# `Project belongs to Area (0..1)`, every `references` relationship
-# (all `0..*`), and every `supports` relationship (`Meeting supports
-# Project` is `0..1`, the rest `0..*`). Not yet implemented: `contains`.
+# This table is that constraint made structural. It holds the 15
+# relationships Processing can establish: `Project belongs to Area
+# (0..1)`, every `references` and `supports` relationship (`Meeting
+# supports Project` is `0..1`, the rest `0..*`), and `Project contains
+# Meeting (0..*)`. The 16th, `Area contains Project`, is not here: it is
+# derived (see `DERIVED_RELATIONSHIPS`) and can never be established.
 #
 # Type names are the Domain classes' `__name__` (`JournalEntry`, not
 # "Journal Entry"): that is what Execution and the CLI look up.
@@ -50,6 +52,7 @@ CANONICAL_RELATIONSHIPS: tuple[RelationshipDefinition, ...] = (
     RelationshipDefinition("Reference", "supports", "Resource", None),
     RelationshipDefinition("Resource", "supports", "Project", None),
     RelationshipDefinition("Meeting", "supports", "Project", 1),
+    RelationshipDefinition("Project", "contains", "Meeting", None),
 )
 
 
@@ -76,6 +79,46 @@ def relationship_definition(
 def relationship_for_pair(source_type: str, target_type: str) -> RelationshipDefinition | None:
     """The single relationship defined from one type toward another."""
     for definition in CANONICAL_RELATIONSHIPS:
+        if definition.source_type == source_type and definition.target_type == target_type:
+            return definition
+    return None
+
+
+@dataclass(frozen=True)
+class DerivedRelationshipDefinition:
+    """A canonical relationship that is a view over another one.
+
+    It is never stored and never established: `via` is the stored
+    relationship it is the complement of, and it is the only place the
+    relationship exists. Because there is a single source of truth, the
+    two can never contradict each other.
+    """
+
+    source_type: str
+    relationship_type: str
+    target_type: str
+    via: RelationshipDefinition
+
+
+# `interaction-model/README.md` ("Relationship Semantics and Inverses") names
+# `Project belongs to Area (0..1)` and `Area contains Project (0..*)` as
+# "semantically complementary" and does not require an inverse to be a
+# separate stored relationship. The Projects an Area contains are those whose
+# `belongs to` targets it. `Project contains Meeting` is NOT here: the spec
+# does not declare it complementary to `Meeting supports Project`, so it is an
+# independent, stored relationship.
+DERIVED_RELATIONSHIPS: tuple[DerivedRelationshipDefinition, ...] = (
+    DerivedRelationshipDefinition(
+        "Area", "contains", "Project", via=relationship_definition("Project", "belongs to", "Area")
+    ),
+)
+
+
+def derived_relationship_for_pair(
+    source_type: str, target_type: str
+) -> DerivedRelationshipDefinition | None:
+    """The derived relationship from one type toward another, if any."""
+    for definition in DERIVED_RELATIONSHIPS:
         if definition.source_type == source_type and definition.target_type == target_type:
             return definition
     return None

@@ -16,7 +16,12 @@ from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io import paths
 from ohtli.vault_io.events import append_event, read_events
-from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
+from ohtli.vault_io.markdown import (
+    list_projects_linking_to,
+    read_inbox_entry,
+    resolve_inbox_entry,
+    rewrite_note,
+)
 from ohtli.workflow import archive as archive_workflow
 from ohtli.workflow import capture, processing
 from ohtli.workflow import evaluation as evaluation_workflow
@@ -729,3 +734,39 @@ def execute_unrelate(
     return RelationshipResult(
         request=request, applicable=True, source=domain_object, path=path, event=event
     )
+
+
+@dataclass(frozen=True)
+class ContainedProjectsResult:
+    applicable: bool
+    projects: tuple[dict[str, Any], ...]
+
+
+def read_contained_projects(
+    area_title: str,
+    *,
+    area_base_dir: Path | None = None,
+    project_base_dir: Path | None = None,
+) -> ContainedProjectsResult:
+    """Read the derived view `Area contains Project`.
+
+    Not an `execute_*` operation: it has no actor, no request and emits no
+    event, because a read is not a state change. `Area contains Project` is
+    never stored (the Interaction Model calls it the complement of `Project
+    belongs to Area`), so it is computed from the Projects whose `belongs to`
+    targets this Area. With a single source of truth it can neither go stale
+    nor contradict the Project side.
+
+    Applicable only when the Area exists. Archived (historical) Projects are
+    included: Archive is non-cascading and their `belongs to` link persists.
+    """
+    area_path = AREA.file_path(area_title, base_dir=area_base_dir)
+    if not area_path.exists():
+        return ContainedProjectsResult(applicable=False, projects=())
+
+    derived = processing.derived_relationship_for_pair("Area", "Project")
+    area_id = AREA.read(area_path)["properties"]["id"]
+    projects = list_projects_linking_to(
+        area_id, derived.via.relationship_type, base_dir=project_base_dir
+    )
+    return ContainedProjectsResult(applicable=True, projects=tuple(projects))

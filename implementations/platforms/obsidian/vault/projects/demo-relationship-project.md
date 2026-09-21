@@ -2,7 +2,7 @@
 id: 899d3721-6563-435f-aac7-7f53f3ac1699
 note_type: project
 created: '2026-09-20'
-updated: '2026-09-20'
+updated: '2026-09-21'
 tags: []
 aliases: []
 status: planned
@@ -23,6 +23,11 @@ relationships:
   target_id: 685e0dd7-abb9-434a-a023-26b87821188e
   target_type: journal_entry
   target_link: '[[journal/entries/demo-inbox-journal-entry|Demo Inbox Journal Entry]]'
+- id: 278236b7-5072-4e5b-ad9a-330b8eb3446a
+  type: contains
+  target_id: df5b09ea-e1c1-4c13-b00a-a370f4ea4846
+  target_type: meeting
+  target_link: '[[meetings/demo-inbox-meeting|Demo Inbox Meeting]]'
 ---
 
 # Demo Relationship Project
