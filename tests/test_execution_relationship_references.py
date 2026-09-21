@@ -205,17 +205,7 @@ def test_a_missing_source_or_target_is_refused_without_an_event(tmp_path, source
     assert _relationship_events(tmp_path) == []
 
 
-@pytest.mark.parametrize(
-    "source,target",
-    [
-        pytest.param(RESOURCE, PROJECT, id="resource-project"),
-        pytest.param(REFERENCE, PROJECT, id="reference-project"),
-        pytest.param(AREA, PROJECT, id="area-project"),
-        pytest.param(MEETING, PROJECT, id="meeting-project"),
-    ],
-)
-@pytest.mark.parametrize("relationship_type", ["references", "supports", "contains", "belongs to"])
-def test_pairs_that_are_supports_or_contains_are_still_refused(tmp_path, source, target, relationship_type):
+def _refused(tmp_path, source, target, relationship_type):
     src = _capture(tmp_path, source, "Source")
     _capture(tmp_path, target, "Target")
     before = src.path.read_bytes()
@@ -233,3 +223,33 @@ def test_pairs_that_are_supports_or_contains_are_still_refused(tmp_path, source,
 
     assert not result.applicable and result.event is None
     assert src.path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "source,target",
+    [
+        pytest.param(AREA, PROJECT, id="area-project"),
+        pytest.param(PROJECT, MEETING, id="project-meeting"),
+    ],
+)
+@pytest.mark.parametrize("relationship_type", ["references", "supports", "contains", "belongs to"])
+def test_the_contains_pairs_are_still_refused_for_every_relationship_type(
+    tmp_path, source, target, relationship_type
+):
+    _refused(tmp_path, source, target, relationship_type)
+
+
+@pytest.mark.parametrize(
+    "source,target",
+    [
+        pytest.param(RESOURCE, PROJECT, id="resource-project"),
+        pytest.param(REFERENCE, PROJECT, id="reference-project"),
+        pytest.param(MEETING, PROJECT, id="meeting-project"),
+    ],
+)
+@pytest.mark.parametrize("relationship_type", ["references", "contains", "belongs to"])
+def test_a_supports_pair_is_refused_for_any_type_other_than_supports(
+    tmp_path, source, target, relationship_type
+):
+    """The table is indexed by relationship type, not only by the pair."""
+    _refused(tmp_path, source, target, relationship_type)

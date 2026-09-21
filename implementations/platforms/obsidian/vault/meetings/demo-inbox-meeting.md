@@ -2,7 +2,7 @@
 id: df5b09ea-e1c1-4c13-b00a-a370f4ea4846
 note_type: meeting
 created: '2026-09-20'
-updated: '2026-09-20'
+updated: '2026-09-21'
 tags: []
 aliases: []
 status: recorded
@@ -18,6 +18,11 @@ relationships:
   target_id: 4c2dffdc-4a5a-4c63-afff-171313f8cab4
   target_type: resource
   target_link: '[[resources/demo-resource-slice|Demo Resource Slice]]'
+- id: 17616250-d913-4976-bd1d-75670d3815b2
+  type: supports
+  target_id: 92135c11-ecb8-499f-a068-59d389735d13
+  target_type: project
+  target_link: '[[projects/demo-inbox-project|Demo Inbox Project]]'
 ---
 
 # Demo Inbox Meeting
