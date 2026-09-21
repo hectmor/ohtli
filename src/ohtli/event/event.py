@@ -26,3 +26,8 @@ class Event:
     occurred_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    # The other end of a Relationship Event (e.g. the Area a Project was
+    # linked to). Optional and defaulted so older JSONL lines still read.
+    # Needed because after an unlink the Current Representation no longer
+    # holds the target, and the Event Model's history would be lost.
+    target_id: str | None = None

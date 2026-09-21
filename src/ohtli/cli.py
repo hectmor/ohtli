@@ -10,14 +10,18 @@ from ohtli.execution.execution import (
     ExecutionRequest,
     KnowledgeRequest,
     ProcessingRequest,
+    RelateRequest,
     ReviewRequest,
+    UnrelateRequest,
     execute_archive,
     execute_capture,
     execute_evaluation,
     execute_knowledge,
     execute_processing,
     execute_reactivate,
+    execute_relate,
     execute_review,
+    execute_unrelate,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
@@ -122,6 +126,17 @@ def main(argv: list[str] | None = None) -> int:
     review_meeting.add_argument("title")
     review_meeting.add_argument("--since", default=None)
 
+    link_project_to_area = subparsers.add_parser(
+        "link-project-to-area", help="Relate a Project to an Area (Project belongs to Area)"
+    )
+    link_project_to_area.add_argument("project")
+    link_project_to_area.add_argument("area")
+
+    unlink_project_from_area = subparsers.add_parser(
+        "unlink-project-from-area", help="Remove a Project's 'belongs to' relationship to its Area"
+    )
+    unlink_project_from_area.add_argument("project")
+
     enrich_project = subparsers.add_parser(
         "enrich-project", help="Enrich a Project with Developed Understanding"
     )
@@ -191,6 +206,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Not applicable: a Reference titled '{args.title}' already exists.")
             return 1
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
+    if args.command == "link-project-to-area":
+        request = RelateRequest(
+            source_title=args.project, target_title=args.area, actor=Actor.HUMAN
+        )
+        result = execute_relate(request)
+        if not result.applicable:
+            print(
+                f"Not applicable: cannot link Project '{args.project}' to Area '{args.area}' "
+                "(both must exist, and a Project belongs to at most one Area)."
+            )
+            return 1
+        print(f"{result.event.event_type}: '{args.project}' belongs to '{args.area}'")
+        return 0
+
+    if args.command == "unlink-project-from-area":
+        request = UnrelateRequest(source_title=args.project, actor=Actor.HUMAN)
+        result = execute_unrelate(request)
+        if not result.applicable:
+            print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.")
+            return 1
+        print(f"{result.event.event_type}: '{args.project}'")
         return 0
 
     if args.command == "create-journal-entry":

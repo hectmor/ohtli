@@ -1,10 +1,65 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Callable, TypeVar
 
 from ohtli.domain.project import Project
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class RelationshipDefinition:
+    """One relationship the Interaction Model defines.
+
+    `max_targets` is the cardinality's upper bound (`None` = unbounded).
+    """
+
+    source_type: str
+    relationship_type: str
+    target_type: str
+    max_targets: int | None
+
+
+# `processing-workflow.md`, "Interaction Constrained": Processing may
+# establish only relationships already defined by the Interaction Model.
+# This table is that constraint made structural. One row for now: the
+# first slice of the Interaction Model (Project belongs to Area, 0..1).
+CANONICAL_RELATIONSHIPS: tuple[RelationshipDefinition, ...] = (
+    RelationshipDefinition("Project", "belongs to", "Area", 1),
+)
+
+
+def relationship_definition(
+    source_type: str, relationship_type: str
+) -> RelationshipDefinition | None:
+    for definition in CANONICAL_RELATIONSHIPS:
+        if definition.source_type == source_type and definition.relationship_type == relationship_type:
+            return definition
+    return None
+
+
+def is_relate_applicable(
+    definition: RelationshipDefinition | None, *, target_type: str, existing_of_type: int
+) -> bool:
+    """`Relate` is applicable only for a relationship the Interaction
+    Model defines, toward the target type it defines, and only while the
+    source is under the relationship's cardinality (0..1 for `belongs
+    to`, so a second link is refused).
+
+    The target's `context` is deliberately not consulted: an archived
+    target is still a valid target (Independent Eligibility,
+    `archive-workflow.md`). Existence of the two notes is checked by
+    Execution, like every other `execute_*`.
+    """
+    if definition is None or target_type != definition.target_type:
+        return False
+    return definition.max_targets is None or existing_of_type < definition.max_targets
+
+
+def is_unrelate_applicable(definition: RelationshipDefinition | None, *, existing_of_type: int) -> bool:
+    """Unlinking is applicable only when there is something to remove."""
+    return definition is not None and existing_of_type >= 1
 
 
 def _split_entry(raw_text: str) -> tuple[str | None, str | None]:
