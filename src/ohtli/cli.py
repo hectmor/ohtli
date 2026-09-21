@@ -24,7 +24,7 @@ from ohtli.execution.execution import (
     execute_unrelate,
     read_contained_projects,
 )
-from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
+from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE, display_name_of
 from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.processing import derived_relationship_for_pair, relationship_for_pair
@@ -39,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
         "meeting": MEETING,
         "journal-entry": JOURNAL_ENTRY,
     }
+    # The CLI kind (the `--from-type` / `--to-type` value) of a Domain class name.
+    # Never derive it with `.lower()`: `JournalEntry` is `journal-entry`.
+    kind_of_type = {spec.domain_type.__name__: kind for kind, spec in spec_by_kind.items()}
 
     parser = argparse.ArgumentParser(prog="ohtli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -273,12 +276,14 @@ def main(argv: list[str] | None = None) -> int:
         derived = derived_relationship_for_pair(source_type, target_type)
         if derived is not None:
             via = derived.via
+            via_source_kind = kind_of_type[via.source_type]
+            via_target_kind = kind_of_type[via.target_type]
             print(
-                f"'{source_type} {derived.relationship_type} {target_type}' is derived from "
-                f"'{via.source_type} {via.relationship_type} {via.target_type}' and is never "
-                f"established directly. Use: ohtli {args.command} --from-type {via.source_type.lower()} "
-                f"--from <{via.source_type.lower()}> --to-type {via.target_type.lower()} "
-                f"--to <{via.target_type.lower()}>; read it with: ohtli contains <area>."
+                f"'{display_name_of(source_type)} {derived.relationship_type} {display_name_of(target_type)}' "
+                f"is derived from '{display_name_of(via.source_type)} {via.relationship_type} "
+                f"{display_name_of(via.target_type)}' and is never established directly. "
+                f"Use: ohtli {args.command} --from-type {via_source_kind} --from <{via_source_kind}> "
+                f"--to-type {via_target_kind} --to <{via_target_kind}>; read it with: ohtli contains <area>."
             )
             return 1
         definition = relationship_for_pair(source_type, target_type)
