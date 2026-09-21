@@ -7,6 +7,12 @@ tags: []
 aliases: []
 status: draft
 context: operational
+relationships:
+- id: 4b3e62e6-cfde-49ea-9fc2-04589f8f1642
+  type: references
+  target_id: 30cc44a2-0072-4e0e-bb1f-298d7ff9f273
+  target_type: reference
+  target_link: '[[references/demo-reference-slice|Demo Reference Slice]]'
 ---
 
 # Demo Inbox Resource

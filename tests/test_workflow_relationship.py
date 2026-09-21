@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from ohtli.execution import specs
 from ohtli.workflow import processing
 
 
@@ -13,6 +14,13 @@ def test_the_canonical_table_holds_exactly_the_implemented_relationships():
         ("Project", "belongs to", "Area", 1),
         ("Project", "references", "Resource", None),
         ("Project", "references", "Reference", None),
+        ("Project", "references", "JournalEntry", None),
+        ("Resource", "references", "Reference", None),
+        ("Meeting", "references", "Reference", None),
+        ("Meeting", "references", "Resource", None),
+        ("JournalEntry", "references", "Project", None),
+        ("JournalEntry", "references", "Area", None),
+        ("JournalEntry", "references", "Resource", None),
     }
 
 
@@ -69,8 +77,8 @@ def test_a_relationship_type_with_several_targets_is_looked_up_by_target_type():
 
     assert resource.target_type == "Resource" and reference.target_type == "Reference"
     assert resource.max_targets is None and reference.max_targets is None
-    assert processing.relationship_definition("Project", "references", "Journal Entry") is None, (
-        "Project references Journal Entry is canonical but not implemented yet"
+    assert processing.relationship_definition("Project", "references", "Meeting") is None, (
+        "the Interaction Model defines no Project references Meeting (Project contains Meeting is a different relationship)"
     )
 
 
@@ -135,3 +143,60 @@ def test_a_bounded_relationship_can_be_unlinked_with_or_without_naming_the_targe
     assert processing.is_unrelate_applicable(
         definition, existing_of_type=1, target_named=True, target_linked=True
     )
+
+
+def test_every_implemented_references_relationship_is_unbounded():
+    references = [d for d in processing.CANONICAL_RELATIONSHIPS if d.relationship_type == "references"]
+
+    assert len(references) == 9
+    assert all(d.max_targets is None for d in references)
+
+
+def test_only_belongs_to_and_references_are_implemented_so_far():
+    """`supports` and `contains` are canonical but deliberately not implemented:
+    `contains` needs a design decision about consistency with `belongs to`."""
+    implemented_types = {d.relationship_type for d in processing.CANONICAL_RELATIONSHIPS}
+
+    assert implemented_types == {"belongs to", "references"}
+
+
+def test_the_supports_and_contains_pairs_are_still_not_implemented():
+    for source, target in (
+        ("Resource", "Project"),
+        ("Reference", "Project"),
+        ("Reference", "Resource"),
+        ("Meeting", "Project"),
+        ("Area", "Project"),
+        ("Project", "Meeting"),
+    ):
+        assert processing.relationship_for_pair(source, target) is None, f"{source} -> {target}"
+
+
+def test_each_new_source_type_resolves_its_relationship_from_the_pair():
+    for source, target in (
+        ("Project", "JournalEntry"),
+        ("Resource", "Reference"),
+        ("Meeting", "Reference"),
+        ("Meeting", "Resource"),
+        ("JournalEntry", "Project"),
+        ("JournalEntry", "Area"),
+        ("JournalEntry", "Resource"),
+    ):
+        definition = processing.relationship_for_pair(source, target)
+        assert (definition.relationship_type, definition.max_targets) == ("references", None), f"{source} -> {target}"
+
+
+def test_every_type_name_in_the_table_is_a_real_domain_class_name():
+    """Execution and the CLI look relationships up by `domain_type.__name__`
+    (`JournalEntry`, not "Journal Entry"). A row spelled any other way is
+    silently unreachable, so the table is checked against the real specs
+    instead of against strings typed in the tests themselves."""
+    real = {
+        spec.domain_type.__name__
+        for spec in (specs.PROJECT, specs.AREA, specs.RESOURCE, specs.REFERENCE, specs.MEETING, specs.JOURNAL_ENTRY)
+    }
+    used = {d.source_type for d in processing.CANONICAL_RELATIONSHIPS} | {
+        d.target_type for d in processing.CANONICAL_RELATIONSHIPS
+    }
+
+    assert used <= real, f"not a Domain class name: {sorted(used - real)}"

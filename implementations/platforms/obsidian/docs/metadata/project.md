@@ -36,8 +36,10 @@ Relationship State). Its authority is the canonical **Interaction
 Model**, not this metadata schema: metadata creates no relationship
 meaning, direction, or cardinality (`metadata-model/README.md`). This
 document only records how the implemented canonical relationships are
-stored: `Project belongs to Area (0..1)`, `Project references Resource
-(0..*)` and `Project references Reference (0..*)`.
+stored: `Project belongs to Area (0..1)` and `Project references
+Resource|Reference|Journal Entry (0..*)`. The other note types that hold
+relationships as a source (Resource, Meeting, Journal Entry) use this same
+shape; see their own metadata documents.
 
 Each entry has:
 
@@ -46,7 +48,7 @@ Each entry has:
 | `id` | The relationship instance's own identity (not the identity of either object). |
 | `type` | The canonical relationship type, verbatim: `belongs to` or `references`. |
 | `target_id` | The target's stable `id`. **The authority.** |
-| `target_type` | The target's kind: `area`, `resource` or `reference`. |
+| `target_type` | The target's kind (its `note_type`): `area`, `resource`, `reference`, or `journal_entry`. |
 | `target_link` | A display-only, vault-relative wikilink, e.g. `[[areas/health\|Health]]`. Non-authoritative decoration: nothing reads it back, it can go stale if the Area is renamed outside Obsidian, and removing it loses no information. |
 
 Relationships reference the target by `id`, never by title or path
