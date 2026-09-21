@@ -1135,7 +1135,7 @@ def test_execute_capture_journal_entry_with_a_date_title_for_both_actors(tmp_pat
     assert human.applicable and deterministic.applicable
     assert isinstance(human.project, JournalEntry)
     assert human.path.name == "2026-07-29.md"
-    assert human.event.event_type == "JournalEntry Created"
+    assert human.event.event_type == "Journal Entry Created"
     assert deterministic.event.actor == "deterministic"
 
 
@@ -1190,7 +1190,7 @@ def test_execute_processing_carries_inbox_content_into_journal_entry_notes(tmp_p
 
         assert result.applicable
         assert isinstance(result.project, JournalEntry)
-        assert result.event.event_type == "JournalEntry Created"
+        assert result.event.event_type == "Journal Entry Created"
         assert result.event.workflow == "processing"
         body = result.path.read_text(encoding="utf-8")
         assert "## Notes\n\nMe di cuenta de que conviene escribir menos y revisar más." in body
@@ -1219,9 +1219,9 @@ def test_execute_archive_and_reactivate_work_for_journal_entry(tmp_path):
     )
 
     assert archived.applicable
-    assert archived.event.event_type == "JournalEntry Archived"
+    assert archived.event.event_type == "Journal Entry Archived"
     assert reactivated.applicable
-    assert reactivated.event.event_type == "JournalEntry Reactivated"
+    assert reactivated.event.event_type == "Journal Entry Reactivated"
 
 
 def test_execute_evaluation_is_never_applicable_for_journal_entry(tmp_path):
@@ -1298,4 +1298,4 @@ def test_execute_review_succeeds_for_journal_entry_because_the_spec_permits_it(t
 
     assert result.applicable
     assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
-    assert result.event.event_type == "JournalEntry Insufficient Assessment Basis Identified"
+    assert result.event.event_type == "Journal Entry Insufficient Assessment Basis Identified"

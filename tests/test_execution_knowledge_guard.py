@@ -60,7 +60,7 @@ def test_an_externalize_target_is_enriched(tmp_path, spec):
     result = _enrich(tmp_path, spec)
 
     assert result.applicable
-    assert result.event.event_type == f"{spec.domain_type.__name__} Knowledge Enriched"
+    assert result.event.event_type == f"{spec.display_name} Knowledge Enriched"
     assert result.event.workflow == "knowledge"
     assert "Something learned." in captured.path.read_text(encoding="utf-8")
 
@@ -76,7 +76,7 @@ def test_a_non_target_is_refused_without_touching_the_note(tmp_path, spec):
     assert result.project is None and result.path is None and result.event is None
     assert captured.path.read_bytes() == before
     assert [e.event_type for e in read_events(events_dir=tmp_path)] == [
-        f"{spec.domain_type.__name__} Created"
+        f"{spec.display_name} Created"
     ], "a refused enrichment emits no event"
 
 

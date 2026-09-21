@@ -13,6 +13,12 @@ relationships:
   target_id: 179b08b5-168c-440d-b46c-5681954ba089
   target_type: area
   target_link: '[[areas/demo-health-area|Demo Health Area]]'
+- id: fd242caa-37f0-4c91-b7bc-286fc28e8621
+  type: references
+  target_id: 48e097b9-827f-4ff2-92e8-5727ac97b010
+  target_type: journal_entry
+  target_link: '[[journal/entries/demo-event-names-journal-entry|Demo Event Names
+    Journal Entry]]'
 ---
 
 # Demo Inbox Project
