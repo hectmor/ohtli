@@ -5,6 +5,9 @@ from typing import Any
 
 from ohtli.domain.resource import Resource
 from ohtli.representation.context import OPERATIONAL
+from ohtli.representation.notes import nest_under_heading_level
+
+_NOTES_LEVEL = 2  # `## Notes` — carried content must nest below it
 
 BODY_TEMPLATE = """# {title}
 
@@ -14,6 +17,8 @@ BODY_TEMPLATE = """# {title}
 
 ## Examples
 
+## Notes
+{notes}
 ## References
 
 ## Related Notes
@@ -21,7 +26,7 @@ BODY_TEMPLATE = """# {title}
 
 
 def to_representation(
-    resource: Resource, *, today: date | None = None
+    resource: Resource, *, today: date | None = None, notes: str | None = None
 ) -> dict[str, Any]:
     """Build the Current Representation for a Resource.
 
@@ -31,6 +36,12 @@ def to_representation(
     first Lifecycle value); `context` is independent from `status`,
     per the same Lifecycle Independence invariant established for
     Project and Area (Phase 13).
+
+    `notes` carries an Inbox entry's body when a Resource originates
+    from Processing. It lands in `## Notes`, the one section no
+    Essential Attribute (Title, Content, Topic) or Responsibility
+    claims: raw text is not yet synthesized knowledge, so it must not
+    sit in `Summary` or `Content`.
     """
     today = today or date.today()
     return {
@@ -45,7 +56,10 @@ def to_representation(
             "context": OPERATIONAL,
         },
         "title": resource.title,
-        "body": BODY_TEMPLATE.format(title=resource.title),
+        "body": BODY_TEMPLATE.format(
+            title=resource.title,
+            notes=f"\n{nest_under_heading_level(notes, _NOTES_LEVEL)}\n" if notes else "",
+        ),
     }
 
 
