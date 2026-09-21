@@ -72,7 +72,7 @@ def test_processing_emits_a_created_event_from_the_processing_workflow(tmp_path,
     result = _process(tmp_path, spec, folder, _entry(tmp_path))
 
     (event,) = read_events(events_dir=tmp_path)
-    assert event.event_type == f"{spec.domain_type.__name__} Created"
+    assert event.event_type == f"{spec.display_name} Created"
     assert event.workflow == "processing"
     assert event.object_id == result.project.id
     assert event.object_type == spec.domain_type.__name__

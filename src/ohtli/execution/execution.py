@@ -10,7 +10,7 @@ from typing import Any, Callable
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
 from ohtli.event.event import Event
-from ohtli.execution.specs import AREA, PROJECT, DomainSpec
+from ohtli.execution.specs import AREA, PROJECT, DomainSpec, display_name_of
 from ohtli.representation import context as archive_transform
 from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
@@ -125,7 +125,7 @@ def execute_capture(
     representation = spec.to_representation(domain_object)
     path = spec.write(representation, base_dir=base_dir)
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} Created",
+        event_type=f"{spec.display_name} Created",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -186,7 +186,7 @@ def execute_processing(
     path = spec.write(representation, base_dir=base_dir)
     resolve_inbox_entry(request.entry_path)
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} Created",
+        event_type=f"{spec.display_name} Created",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -243,7 +243,7 @@ def _execute_contextual_transition(
     rewrite_note(path, updated_representation)
     domain_object = spec.from_representation(updated_representation)
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} {event_verb}",
+        event_type=f"{spec.display_name} {event_verb}",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -366,7 +366,7 @@ def execute_evaluation(
 
     domain_object = spec.from_representation(representation)
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} {_RESULT_VERBS[request.result]}",
+        event_type=f"{spec.display_name} {_RESULT_VERBS[request.result]}",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -439,7 +439,7 @@ def execute_review(
     assessment = review_workflow.assess(representation["properties"], evaluation_events)
 
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} {_CONCLUSION_VERBS[assessment.conclusion]}",
+        event_type=f"{spec.display_name} {_CONCLUSION_VERBS[assessment.conclusion]}",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -515,7 +515,7 @@ def execute_knowledge(
     domain_object = spec.from_representation(enriched_representation)
 
     event = _emit(
-        event_type=f"{spec.domain_type.__name__} Knowledge Enriched",
+        event_type=f"{spec.display_name} Knowledge Enriched",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -638,7 +638,7 @@ def execute_relate(
     domain_object = source_spec.from_representation(linked)
 
     event = _emit(
-        event_type=f"{source_type} Linked to {target_type}",
+        event_type=f"{source_spec.display_name} Linked to {target_spec.display_name}",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,
@@ -722,7 +722,7 @@ def execute_unrelate(
     domain_object = spec.from_representation(unlinked)
 
     event = _emit(
-        event_type=f"{source_type} Unlinked from {definition.target_type}",
+        event_type=f"{spec.display_name} Unlinked from {display_name_of(definition.target_type)}",
         domain_object=domain_object,
         actor=request.actor,
         execution_id=request.execution_id,

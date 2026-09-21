@@ -97,7 +97,7 @@ def test_the_link_event_names_both_ends(tmp_path, source, target):
 
     result = _link(tmp_path, source, target)
 
-    assert result.event.event_type == f"{source.domain_type.__name__} Linked to {target.domain_type.__name__}"
+    assert result.event.event_type == f"{source.display_name} Linked to {target.display_name}"
     assert result.event.object_id == src.project.id
     assert result.event.object_type == source.domain_type.__name__
     assert result.event.target_id == tgt.project.id
@@ -202,7 +202,7 @@ def test_unlink_by_target_removes_exactly_that_instance(tmp_path, source, target
     result = _unlink(tmp_path, source, target, target_title="Target")
 
     assert result.applicable
-    assert result.event.event_type == f"{source.domain_type.__name__} Unlinked from {target.domain_type.__name__}"
+    assert result.event.event_type == f"{source.display_name} Unlinked from {target.display_name}"
     assert result.event.object_id == src.project.id
     assert [e["target_id"] for e in _entries(source, src.path)] == [two.project.id]
 
