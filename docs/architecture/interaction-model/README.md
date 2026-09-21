@@ -14,7 +14,8 @@ The Interaction Model defines:
 - relationship meaning;
 - relationship direction;
 - relationship cardinality when multiplicity is part of the semantic
-  contract.
+  contract;
+- relationship uniqueness.
 
 The Interaction Model does not define workflows, events, Object
 lifecycles, behavioral business rules, or implementation details.
@@ -315,6 +316,16 @@ Area
 
 These relationships are semantically complementary.
 
+Where two relationships are complementary in this sense, they describe one
+underlying structure and must not be able to disagree. `Area contains Project`
+is the complement of `Project belongs to Area`: the Projects an Area contains
+are exactly the Projects that belong to it. The complement is not established
+independently of the relationship it complements.
+
+Complementarity is a property of specific relationships that this document
+names; it is not implied by two relationships merely involving the same pair of
+Domain Objects.
+
 However, the Interaction Model does not require every relationship to
 have an explicitly defined inverse.
 
@@ -390,6 +401,24 @@ the same domain semantics.
 
 ---
 
+# Relationship Uniqueness
+
+A relationship is semantically identified by its source, its relationship
+type, and its target. For a given source and target, a given relationship
+type holds at most once.
+
+For example, a Project references a given Resource at most once, however
+many Resources it references.
+
+This is distinct from the identity of a relationship instance, which
+distinguishes instances but does not by itself determine whether equivalent
+instances may coexist (Representation Model, "Identity and Uniqueness").
+Uniqueness is a semantic contract owned by the Interaction Model. Like
+cardinality, it must not be interpreted as an implementation-specific storage
+constraint.
+
+---
+
 # Boundaries
 
 The Interaction Model owns:
@@ -408,6 +437,7 @@ including, when semantically relevant:
 relationship type
 relationship direction
 relationship cardinality
+relationship uniqueness
 ```
 
 It does not own transformations between system states.
@@ -506,7 +536,8 @@ The Interaction Model defines:
 - relationship types;
 - relationship direction;
 - relationship cardinality when multiplicity is part of the semantic
-  contract.
+  contract;
+- relationship uniqueness.
 
 The following concepts are intentionally excluded:
 
