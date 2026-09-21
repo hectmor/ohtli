@@ -25,7 +25,7 @@ from ohtli.execution.execution import (
     read_contained_projects,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
-from ohtli.vault_io.markdown import list_inbox_entries
+from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.processing import derived_relationship_for_pair, relationship_for_pair
 
@@ -70,6 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         choices=list(spec_by_kind),
         default="project",
         help="Domain Object every entry in this run becomes (default: project)",
+    )
+    process_inbox.add_argument(
+        "--entry",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Process only this Inbox entry, given as its file name (with or without .md, never a "
+            "path); repeat to name several. Without it, every Inbox entry is processed."
+        ),
     )
 
     archive_project = subparsers.add_parser("archive-project", help="Archive a Project")
@@ -361,20 +371,42 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "process-inbox":
-        entries = list_inbox_entries()
-        if not entries:
-            print("Inbox is empty.")
-            return 0
+        named = args.entry is not None
+        if named:
+            # Resolve every name before processing anything: an unknown name
+            # must not leave a half-done run, because processing deletes the entry.
+            entries = []
+            unresolved = []
+            for name in args.entry:
+                found = find_inbox_entry(name)
+                if found is None:
+                    unresolved.append(name)
+                elif found not in entries:
+                    entries.append(found)
+            if unresolved:
+                for name in unresolved:
+                    print(f"Not applicable: no Inbox entry named '{name}'.")
+                print("Nothing was processed.")
+                return 1
+        else:
+            entries = list_inbox_entries()
+            if not entries:
+                print("Inbox is empty.")
+                return 0
 
+        refused = 0
         for entry_path in entries:
             request = ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN)
             result = execute_processing(request, spec=spec_by_kind[args.kind])
             if not result.applicable:
+                refused += 1
                 print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.")
                 continue
             label = args.kind.replace("-", " ").title()
             print(f"Processed {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
+        # Batch mode keeps exiting 0 when it refuses entries; an entry the user
+        # asked for by name that could not be processed is a failure.
+        return 1 if (named and refused) else 0
 
     if args.command in (
         "archive-project",

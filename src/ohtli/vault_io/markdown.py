@@ -205,6 +205,32 @@ def list_inbox_entries(*, base_dir: Path | None = None) -> list[Path]:
     )
 
 
+def find_inbox_entry(name: str, *, base_dir: Path | None = None) -> Path | None:
+    """The one Inbox entry called `name`, or `None`.
+
+    `name` is a file name, with or without `.md`; never a path. Processing an
+    entry resolves (deletes) it, so a name must never be able to reach a file
+    outside the Inbox. That is guaranteed by construction rather than by a list
+    of forbidden characters: the name is compared against the names of the files
+    `list_inbox_entries` already returns, and the path handed back is one of
+    those, never one built from `name`. So `../x.md`, `sub/x.md`, an absolute
+    path, `.` and `..` cannot match anything, and the selectable set is exactly
+    the batch's (only `.md` files directly in the Inbox, minus the reserved
+    navigation names).
+
+    A blank name is rejected explicitly: `""` would otherwise become `.md`, which
+    would match a file called exactly `.md`. Matching is exact and
+    case-sensitive. A pure lookup: it does not read or change any entry.
+    """
+    if not name.strip():
+        return None
+    file_name = name if name.endswith(".md") else f"{name}.md"
+    for entry in list_inbox_entries(base_dir=base_dir):
+        if entry.name == file_name:
+            return entry
+    return None
+
+
 def read_inbox_entry(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
