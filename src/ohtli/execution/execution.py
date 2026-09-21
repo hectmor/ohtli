@@ -10,8 +10,9 @@ from typing import Any, Callable
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
 from ohtli.event.event import Event
-from ohtli.execution.specs import PROJECT, DomainSpec
+from ohtli.execution.specs import AREA, PROJECT, DomainSpec
 from ohtli.representation import context as archive_transform
+from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.markdown import read_inbox_entry, resolve_inbox_entry, rewrite_note
@@ -46,6 +47,7 @@ def _emit(
     execution_id: str,
     workflow: str,
     events_dir: Path | None,
+    target_id: str | None = None,
 ) -> Event:
     """Record one Event for a successful operation.
 
@@ -53,6 +55,9 @@ def _emit(
     emission logic is never duplicated per workflow. `Event !=
     Current State`: this never influences applicability or any
     returned Domain Object/Representation.
+
+    `target_id` is set only by Relationship Events, naming the other
+    end of the relationship; every other operation leaves it `None`.
     """
     event = Event(
         event_type=event_type,
@@ -61,6 +66,7 @@ def _emit(
         actor=actor.value,
         execution_id=execution_id,
         workflow=workflow,
+        target_id=target_id,
     )
     append_event(event, events_dir=events_dir)
     return event
@@ -505,3 +511,170 @@ def execute_knowledge(
     )
 
     return KnowledgeResult(request=request, applicable=True, project=domain_object, path=path, event=event)
+
+
+def _link_display(target_path: Path, target_title: str) -> str:
+    """A display-only, folder-qualified wikilink to the target note.
+
+    Folder-qualified so two notes with the same slug in different
+    folders (a Project and an Area both called "health") stay
+    unambiguous. Non-authoritative: `target_id` is the authority, and no
+    `execute_*` ever reads this back.
+    """
+    return f"[[{target_path.parent.name}/{target_path.stem}|{target_title}]]"
+
+
+@dataclass(frozen=True)
+class RelateRequest:
+    source_title: str
+    target_title: str
+    actor: Actor
+    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    relationship_type: str = "belongs to"
+
+
+@dataclass(frozen=True)
+class UnrelateRequest:
+    source_title: str
+    actor: Actor
+    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    relationship_type: str = "belongs to"
+
+
+@dataclass(frozen=True)
+class RelationshipResult:
+    request: RelateRequest | UnrelateRequest
+    applicable: bool
+    source: Project | Area | None
+    path: Path | None
+    event: Event | None
+
+
+def execute_relate(
+    request: RelateRequest,
+    *,
+    source_spec: DomainSpec = PROJECT,
+    target_spec: DomainSpec = AREA,
+    base_dir: Path | None = None,
+    target_base_dir: Path | None = None,
+    events_dir: Path | None = None,
+) -> RelationshipResult:
+    """Execute Processing's `Relate` operation: establish a semantic
+    relationship between two existing Domain Objects
+    (`processing-workflow.md`).
+
+    Both notes must exist. Which relationships are allowed, toward which
+    target type, and how many, is decided by the canonical table in
+    `workflow/processing.py` — Processing may establish only
+    relationships the Interaction Model defines. The relationship is
+    stored on the source note only (the inverse is not stored) and
+    references the target by its stable `id`.
+
+    `base_dir` is the source's directory and `target_base_dir` the
+    target's; both default to the real vault, and tests pass temporary
+    directories so they never touch it.
+    """
+    not_applicable = RelationshipResult(
+        request=request, applicable=False, source=None, path=None, event=None
+    )
+
+    source_path = source_spec.file_path(request.source_title, base_dir=base_dir)
+    target_path = target_spec.file_path(request.target_title, base_dir=target_base_dir)
+    if not source_path.exists() or not target_path.exists():
+        return not_applicable
+
+    source_representation = source_spec.read(source_path)
+    target_representation = target_spec.read(target_path)
+
+    source_type = source_spec.domain_type.__name__
+    target_type = target_spec.domain_type.__name__
+    definition = processing.relationship_definition(source_type, request.relationship_type)
+    existing = relationship_transform.relationships_of_type(
+        source_representation, request.relationship_type
+    )
+    if not processing.is_relate_applicable(
+        definition, target_type=target_type, existing_of_type=len(existing)
+    ):
+        return not_applicable
+
+    target_id = target_representation["properties"]["id"]
+    linked = relationship_transform.relate(
+        source_representation,
+        relationship_type=request.relationship_type,
+        target_id=target_id,
+        target_type=target_type.lower(),
+        target_link=_link_display(target_path, target_representation["title"]),
+    )
+    rewrite_note(source_path, linked)
+    domain_object = source_spec.from_representation(linked)
+
+    event = _emit(
+        event_type=f"{source_type} Linked to {target_type}",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="processing",
+        events_dir=events_dir,
+        target_id=target_id,
+    )
+
+    return RelationshipResult(
+        request=request, applicable=True, source=domain_object, path=source_path, event=event
+    )
+
+
+def execute_unrelate(
+    request: UnrelateRequest,
+    *,
+    spec: DomainSpec = PROJECT,
+    base_dir: Path | None = None,
+    events_dir: Path | None = None,
+) -> RelationshipResult:
+    """Remove a relationship from a note.
+
+    Needed because a `0..1` cardinality would otherwise leave the source
+    permanently unable to move. Moving is unlink + link: two Events,
+    since a changed relationship is a distinct instance
+    (`relationship-representation.md`, "Relationship Changes").
+
+    Removes the relationship of `request.relationship_type`. That is
+    unambiguous while every defined relationship is `0..1`; an unbounded
+    relationship would need the caller to name which target to unlink.
+    """
+    not_applicable = RelationshipResult(
+        request=request, applicable=False, source=None, path=None, event=None
+    )
+
+    path = spec.file_path(request.source_title, base_dir=base_dir)
+    if not path.exists():
+        return not_applicable
+
+    representation = spec.read(path)
+    source_type = spec.domain_type.__name__
+    definition = processing.relationship_definition(source_type, request.relationship_type)
+    existing = relationship_transform.relationships_of_type(
+        representation, request.relationship_type
+    )
+    if not processing.is_unrelate_applicable(definition, existing_of_type=len(existing)):
+        return not_applicable
+
+    removed_target_id = existing[0]["target_id"]
+    unlinked = relationship_transform.unrelate(
+        representation, relationship_type=request.relationship_type
+    )
+    rewrite_note(path, unlinked)
+    domain_object = spec.from_representation(unlinked)
+
+    event = _emit(
+        event_type=f"{source_type} Unlinked from {definition.target_type}",
+        domain_object=domain_object,
+        actor=request.actor,
+        execution_id=request.execution_id,
+        workflow="processing",
+        events_dir=events_dir,
+        target_id=removed_target_id,
+    )
+
+    return RelationshipResult(
+        request=request, applicable=True, source=domain_object, path=path, event=event
+    )
