@@ -959,21 +959,18 @@ def test_execute_evaluation_is_never_applicable_for_reference(tmp_path):
         assert not result.applicable, f"{result_value} must not be applicable for Reference"
 
 
-def test_execute_knowledge_currently_succeeds_for_reference_despite_not_being_a_spec_target(tmp_path):
-    """Documents a known, accepted gap rather than leaving it an
-    untested assumption: knowledge-workflow.md only names Project,
-    Area, and Resource as Externalize targets -- Reference is a
-    source, not an enrichment target. But nothing in execute_knowledge()
-    or representation/understanding.py's enrich() is type-aware, so
-    this call succeeds today. Excluded only by CLI omission (no
-    enrich-reference command), not by a structural guard -- there is
-    no spec evidence to justify inventing one for this phase."""
-    execute_capture(
+def test_execute_knowledge_is_refused_for_reference_because_it_is_not_an_externalize_target(tmp_path):
+    """knowledge-workflow.md names Reference only as a source (input), never an
+    Externalize target: Project, Area, and Resource are the only targets.
+    Enforced structurally by `is_externalize_target`, not by CLI omission."""
+    captured = execute_capture(
         ExecutionRequest(title="Enrichable Despite The Spec", actor=Actor.HUMAN),
         spec=REFERENCE,
         base_dir=tmp_path,
         events_dir=tmp_path,
     )
+    before = captured.path.read_text(encoding="utf-8")
+    events_before = len(read_events(events_dir=tmp_path))
 
     result = execute_knowledge(
         KnowledgeRequest(
@@ -988,11 +985,10 @@ def test_execute_knowledge_currently_succeeds_for_reference_despite_not_being_a_
         events_dir=tmp_path,
     )
 
-    assert result.applicable, (
-        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
-        "Domain Objects; this must stay true until a future phase adds one deliberately"
-    )
-    assert result.event.event_type == "Reference Knowledge Enriched"
+    assert not result.applicable
+    assert result.event is None and result.path is None
+    assert captured.path.read_text(encoding="utf-8") == before, "a refused enrichment must not touch the note"
+    assert len(read_events(events_dir=tmp_path)) == events_before, "a refused enrichment emits no event"
 
 
 def test_execute_capture_and_reactivate_work_for_meeting(tmp_path):
@@ -1091,17 +1087,17 @@ def test_execute_evaluation_is_never_applicable_for_meeting(tmp_path):
         assert not result.applicable, f"{result_value} must not be applicable for Meeting"
 
 
-def test_execute_knowledge_currently_succeeds_for_meeting_despite_not_being_a_spec_target(tmp_path):
-    """Same documented, accepted gap as Reference (Phase 19):
-    knowledge-workflow.md names Meeting only as a source, never an
-    Externalize target, but execute_knowledge() has no structural
-    guard against this -- excluded only by CLI omission."""
-    execute_capture(
+def test_execute_knowledge_is_refused_for_meeting_because_it_is_not_an_externalize_target(tmp_path):
+    """Same rule as Reference: Meeting is a Knowledge source, never an
+    Externalize target (`knowledge-workflow.md`)."""
+    captured = execute_capture(
         ExecutionRequest(title="Enrichable Meeting Despite The Spec", actor=Actor.HUMAN),
         spec=MEETING,
         base_dir=tmp_path,
         events_dir=tmp_path,
     )
+    before = captured.path.read_text(encoding="utf-8")
+    events_before = len(read_events(events_dir=tmp_path))
 
     result = execute_knowledge(
         KnowledgeRequest(
@@ -1116,11 +1112,10 @@ def test_execute_knowledge_currently_succeeds_for_meeting_despite_not_being_a_sp
         events_dir=tmp_path,
     )
 
-    assert result.applicable, (
-        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
-        "Domain Objects; this must stay true until a future phase adds one deliberately"
-    )
-    assert result.event.event_type == "Meeting Knowledge Enriched"
+    assert not result.applicable
+    assert result.event is None and result.path is None
+    assert captured.path.read_text(encoding="utf-8") == before, "a refused enrichment must not touch the note"
+    assert len(read_events(events_dir=tmp_path)) == events_before, "a refused enrichment emits no event"
 
 
 def test_execute_capture_journal_entry_with_a_date_title_for_both_actors(tmp_path):
@@ -1249,17 +1244,17 @@ def test_execute_evaluation_is_never_applicable_for_journal_entry(tmp_path):
         assert not result.applicable, f"{result_value} must not be applicable for Journal Entry"
 
 
-def test_execute_knowledge_currently_succeeds_for_journal_entry_despite_not_being_a_spec_target(tmp_path):
-    """Documented, accepted gap (same as Reference/Meeting):
-    knowledge-workflow.md names Journal Entry only as a source, never
-    an Externalize target, but execute_knowledge() has no structural
-    guard -- excluded only by CLI omission (no enrich-journal-entry)."""
-    execute_capture(
+def test_execute_knowledge_is_refused_for_journal_entry_because_it_is_not_an_externalize_target(tmp_path):
+    """Same rule as Reference/Meeting: Journal Entry is a Knowledge source, never
+    an Externalize target (`knowledge-workflow.md`)."""
+    captured = execute_capture(
         ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
         spec=JOURNAL_ENTRY,
         base_dir=tmp_path,
         events_dir=tmp_path,
     )
+    before = captured.path.read_text(encoding="utf-8")
+    events_before = len(read_events(events_dir=tmp_path))
 
     result = execute_knowledge(
         KnowledgeRequest(
@@ -1274,18 +1269,19 @@ def test_execute_knowledge_currently_succeeds_for_journal_entry_despite_not_bein
         events_dir=tmp_path,
     )
 
-    assert result.applicable, (
-        "known gap: execute_knowledge has no structural guard against non-Externalize-target "
-        "Domain Objects; this must stay true until a future phase adds one deliberately"
-    )
-    assert result.event.event_type == "JournalEntry Knowledge Enriched"
+    assert not result.applicable
+    assert result.event is None and result.path is None
+    assert captured.path.read_text(encoding="utf-8") == before, "a refused enrichment must not touch the note"
+    assert len(read_events(events_dir=tmp_path)) == events_before, "a refused enrichment emits no event"
 
 
-def test_execute_review_currently_succeeds_for_journal_entry_despite_being_context_not_subject(tmp_path):
-    """Documented, accepted gap: review-workflow.md treats a Journal
-    Entry as context for a broader Review, not a Review subject, but
-    execute_review() is type-agnostic -- excluded only by CLI omission
-    (no review-journal-entry)."""
+def test_execute_review_succeeds_for_journal_entry_because_the_spec_permits_it(tmp_path):
+    """Not a gap. review-workflow.md lists Journal Entries as a Review input
+    and says a Journal Entry "may provide relevant context for a broader
+    Review", adding that these examples "do not define rigid evaluation
+    semantics for every domain object". Nothing forbids reviewing one, so
+    `execute_review` deliberately has no guard. The absence of a
+    `review-journal-entry` CLI command is a UX choice, not a spec rule."""
     execute_capture(
         ExecutionRequest(title="2026-07-29", actor=Actor.HUMAN),
         spec=JOURNAL_ENTRY,
@@ -1300,9 +1296,6 @@ def test_execute_review_currently_succeeds_for_journal_entry_despite_being_conte
         events_dir=tmp_path,
     )
 
-    assert result.applicable, (
-        "known gap: execute_review has no structural guard against non-subject Domain Objects; "
-        "this must stay true until a future phase adds one deliberately"
-    )
+    assert result.applicable
     assert result.assessment.conclusion == ReviewConclusion.INSUFFICIENT_BASIS
     assert result.event.event_type == "JournalEntry Insufficient Assessment Basis Identified"

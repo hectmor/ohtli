@@ -474,8 +474,12 @@ def execute_knowledge(
     events_dir: Path | None = None,
 ) -> KnowledgeResult:
     """Execute Knowledge's Externalize operation: enrich an existing
-    Project or Area with Developed Understanding supplied by the
-    caller.
+    Project, Area, or Resource with Developed Understanding supplied
+    by the caller.
+
+    Only those three are Externalize targets (`knowledge-workflow.md`);
+    Reference, Meeting, and Journal Entry are Knowledge inputs, so any
+    other `spec` is refused up front, before the filesystem is touched.
 
     Explore/Extract/Connect/Synthesize happen outside Ohtli's code
     (mirroring Execution's Act) -- the actor supplies the
@@ -485,6 +489,9 @@ def execute_knowledge(
     an existing object, and Epistemic Provenance is only testable
     against a persisted representation.
     """
+    if not knowledge_workflow.is_externalize_target(spec.domain_type.__name__):
+        return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
+
     path = spec.file_path(request.title, base_dir=base_dir)
     if not path.exists():
         return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
