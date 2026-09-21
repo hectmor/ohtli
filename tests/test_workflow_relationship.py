@@ -21,6 +21,10 @@ def test_the_canonical_table_holds_exactly_the_implemented_relationships():
         ("JournalEntry", "references", "Project", None),
         ("JournalEntry", "references", "Area", None),
         ("JournalEntry", "references", "Resource", None),
+        ("Reference", "supports", "Project", None),
+        ("Reference", "supports", "Resource", None),
+        ("Resource", "supports", "Project", None),
+        ("Meeting", "supports", "Project", 1),
     }
 
 
@@ -152,24 +156,51 @@ def test_every_implemented_references_relationship_is_unbounded():
     assert all(d.max_targets is None for d in references)
 
 
-def test_only_belongs_to_and_references_are_implemented_so_far():
-    """`supports` and `contains` are canonical but deliberately not implemented:
-    `contains` needs a design decision about consistency with `belongs to`."""
+def test_every_relationship_type_but_contains_is_implemented():
+    """Only `contains` is deliberately left out: `Area contains Project` and
+    `Project contains Meeting` live on a different note from `belongs to` /
+    `supports` and could contradict them, so they need a design decision."""
     implemented_types = {d.relationship_type for d in processing.CANONICAL_RELATIONSHIPS}
 
-    assert implemented_types == {"belongs to", "references"}
+    assert implemented_types == {"belongs to", "references", "supports"}
 
 
-def test_the_supports_and_contains_pairs_are_still_not_implemented():
+def test_the_contains_pairs_are_still_not_implemented():
+    for source, target in (("Area", "Project"), ("Project", "Meeting")):
+        assert processing.relationship_for_pair(source, target) is None, f"{source} -> {target}"
+
+
+def test_only_meeting_supports_project_is_bounded_to_one_target():
+    supports = {
+        (d.source_type, d.target_type): d.max_targets
+        for d in processing.CANONICAL_RELATIONSHIPS
+        if d.relationship_type == "supports"
+    }
+
+    assert supports == {
+        ("Reference", "Project"): None,
+        ("Reference", "Resource"): None,
+        ("Resource", "Project"): None,
+        ("Meeting", "Project"): 1,
+    }
+
+
+def test_a_bounded_supports_relationship_refuses_a_second_target():
+    meeting = processing.relationship_definition("Meeting", "supports", "Project")
+
+    assert processing.is_relate_applicable(meeting, target_type="Project", existing_of_type=0)
+    assert not processing.is_relate_applicable(meeting, target_type="Project", existing_of_type=1)
+
+
+def test_each_supports_pair_resolves_its_relationship_from_the_pair():
     for source, target in (
-        ("Resource", "Project"),
         ("Reference", "Project"),
         ("Reference", "Resource"),
+        ("Resource", "Project"),
         ("Meeting", "Project"),
-        ("Area", "Project"),
-        ("Project", "Meeting"),
     ):
-        assert processing.relationship_for_pair(source, target) is None, f"{source} -> {target}"
+        definition = processing.relationship_for_pair(source, target)
+        assert definition.relationship_type == "supports", f"{source} -> {target}"
 
 
 def test_each_new_source_type_resolves_its_relationship_from_the_pair():

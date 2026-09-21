@@ -34,7 +34,8 @@ invariant, Archive/Reactivate must never change `status`.
 Relationship Instances, **absent until the first link**. Its authority is
 the canonical **Interaction Model**, not this metadata schema. This
 document only records which implemented relationships this note type
-holds as a **source**: `Resource references Reference (0..*)`. Instance fields, identity, uniqueness, and
+holds as a **source**: `Resource references Reference (0..*)` and
+`Resource supports Project (0..*)`. Instance fields, identity, uniqueness, and
 unlink rules are the same for every source type and are described once in
 `project.md` ("`relationships`").
 
