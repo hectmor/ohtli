@@ -56,6 +56,10 @@ class DomainSpec:
     """
 
     domain_type: type
+    # The representation's `note_type` value (e.g. `journal_entry`). Used where
+    # a relationship records the kind of its target, instead of guessing it
+    # from the Python class name (`JournalEntry`.lower() != `journal_entry`).
+    note_type: str
     to_representation: Callable[..., dict[str, Any]]
     from_representation: Callable[[dict[str, Any]], Any]
     write: Callable[..., Path]
@@ -67,6 +71,7 @@ class DomainSpec:
 
 PROJECT = DomainSpec(
     domain_type=Project,
+    note_type="project",
     to_representation=project_to_representation,
     from_representation=project_from_representation,
     write=write_project,
@@ -85,6 +90,7 @@ PROJECT = DomainSpec(
 
 AREA = DomainSpec(
     domain_type=Area,
+    note_type="area",
     to_representation=area_to_representation,
     from_representation=area_from_representation,
     write=write_area,
@@ -102,6 +108,7 @@ AREA = DomainSpec(
 
 RESOURCE = DomainSpec(
     domain_type=Resource,
+    note_type="resource",
     to_representation=resource_to_representation,
     from_representation=resource_from_representation,
     write=write_resource,
@@ -118,6 +125,7 @@ RESOURCE = DomainSpec(
 
 REFERENCE = DomainSpec(
     domain_type=Reference,
+    note_type="reference",
     to_representation=reference_to_representation,
     from_representation=reference_from_representation,
     write=write_reference,
@@ -130,6 +138,7 @@ REFERENCE = DomainSpec(
 
 MEETING = DomainSpec(
     domain_type=Meeting,
+    note_type="meeting",
     to_representation=meeting_to_representation,
     from_representation=meeting_from_representation,
     write=write_meeting,
@@ -143,6 +152,7 @@ MEETING = DomainSpec(
 
 JOURNAL_ENTRY = DomainSpec(
     domain_type=JournalEntry,
+    note_type="journal_entry",
     to_representation=journal_entry_to_representation,
     from_representation=journal_entry_from_representation,
     write=write_journal_entry,

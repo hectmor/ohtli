@@ -109,3 +109,39 @@ def test_unrelate_on_a_note_without_relationships_is_harmless():
     unlinked = unrelate(rep, relationship_type="belongs to", today=date(2026, 9, 21))
 
     assert "relationships" not in unlinked["properties"]
+
+
+def test_unrelate_by_target_removes_only_that_instance():
+    rep = _link(_link(_project_rep(), relationship_type="references", target_id="res-1"),
+                relationship_type="references", target_id="res-2")
+
+    unlinked = unrelate(rep, relationship_type="references", target_id="res-1")
+
+    (remaining,) = unlinked["properties"]["relationships"]
+    assert remaining["target_id"] == "res-2"
+
+
+def test_unrelate_by_target_keeps_the_key_until_the_last_instance_goes():
+    rep = _link(_link(_project_rep(), relationship_type="references", target_id="res-1"),
+                relationship_type="references", target_id="res-2")
+
+    once = unrelate(rep, relationship_type="references", target_id="res-1")
+    twice = unrelate(once, relationship_type="references", target_id="res-2")
+
+    assert "relationships" in once["properties"]
+    assert "relationships" not in twice["properties"]
+
+
+def test_unrelate_without_a_target_still_removes_every_instance_of_the_type():
+    rep = _link(_link(_project_rep(), relationship_type="references", target_id="res-1"),
+                relationship_type="references", target_id="res-2")
+
+    assert "relationships" not in unrelate(rep, relationship_type="references")["properties"]
+
+
+def test_unrelate_by_a_target_that_is_not_linked_changes_nothing_but_updated():
+    rep = _link(_project_rep(), relationship_type="references", target_id="res-1")
+
+    unlinked = unrelate(rep, relationship_type="references", target_id="not-linked")
+
+    assert unlinked["properties"]["relationships"] == rep["properties"]["relationships"]

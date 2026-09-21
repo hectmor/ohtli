@@ -26,9 +26,19 @@ from ohtli.execution.execution import (
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.markdown import list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
+from ohtli.workflow.processing import relationship_for_pair
 
 
 def main(argv: list[str] | None = None) -> int:
+    spec_by_kind = {
+        "project": PROJECT,
+        "area": AREA,
+        "resource": RESOURCE,
+        "reference": REFERENCE,
+        "meeting": MEETING,
+        "journal-entry": JOURNAL_ENTRY,
+    }
+
     parser = argparse.ArgumentParser(prog="ohtli")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -137,6 +147,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     unlink_project_from_area.add_argument("project")
 
+    link = subparsers.add_parser(
+        "link",
+        help="Relate two objects; the relationship type is derived from the pair of kinds",
+    )
+    link.add_argument("--from-type", required=True, choices=list(spec_by_kind))
+    link.add_argument("--from", dest="from_title", required=True)
+    link.add_argument("--to-type", required=True, choices=list(spec_by_kind))
+    link.add_argument("--to", dest="to_title", required=True)
+
+    unlink = subparsers.add_parser(
+        "unlink",
+        help="Remove a relationship; --to is required for a 0..* relationship, optional for 0..1",
+    )
+    unlink.add_argument("--from-type", required=True, choices=list(spec_by_kind))
+    unlink.add_argument("--from", dest="from_title", required=True)
+    unlink.add_argument("--to-type", required=True, choices=list(spec_by_kind))
+    unlink.add_argument("--to", dest="to_title", default=None)
+
     enrich_project = subparsers.add_parser(
         "enrich-project", help="Enrich a Project with Developed Understanding"
     )
@@ -162,15 +190,6 @@ def main(argv: list[str] | None = None) -> int:
     enrich_resource.add_argument("--provenance", required=True, nargs="+")
 
     args = parser.parse_args(argv)
-
-    spec_by_kind = {
-        "project": PROJECT,
-        "area": AREA,
-        "resource": RESOURCE,
-        "reference": REFERENCE,
-        "meeting": MEETING,
-        "journal-entry": JOURNAL_ENTRY,
-    }
 
     if args.command == "create-project":
         request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
@@ -206,6 +225,59 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Not applicable: a Reference titled '{args.title}' already exists.")
             return 1
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
+        return 0
+
+    if args.command in ("link", "unlink"):
+        source_spec = spec_by_kind[args.from_type]
+        target_spec = spec_by_kind[args.to_type]
+        definition = relationship_for_pair(
+            source_spec.domain_type.__name__, target_spec.domain_type.__name__
+        )
+        if definition is None:
+            print(
+                f"No canonical relationship is implemented from '{args.from_type}' "
+                f"to '{args.to_type}'."
+            )
+            return 1
+
+        if args.command == "link":
+            result = execute_relate(
+                RelateRequest(
+                    source_title=args.from_title,
+                    target_title=args.to_title,
+                    actor=Actor.HUMAN,
+                    relationship_type=definition.relationship_type,
+                ),
+                source_spec=source_spec,
+                target_spec=target_spec,
+            )
+            if not result.applicable:
+                print(
+                    f"Not applicable: cannot link {args.from_type} '{args.from_title}' "
+                    f"to {args.to_type} '{args.to_title}' (both must exist, it must not "
+                    "already be linked, and the cardinality must allow it)."
+                )
+                return 1
+            print(f"{result.event.event_type}: '{args.from_title}' {definition.relationship_type} '{args.to_title}'")
+            return 0
+
+        result = execute_unrelate(
+            UnrelateRequest(
+                source_title=args.from_title,
+                actor=Actor.HUMAN,
+                relationship_type=definition.relationship_type,
+                target_title=args.to_title,
+            ),
+            spec=source_spec,
+            target_spec=target_spec if args.to_title is not None else None,
+        )
+        if not result.applicable:
+            print(
+                f"Not applicable: cannot unlink {args.from_type} '{args.from_title}'. "
+                "It must exist and be linked; a 0..* relationship also needs --to."
+            )
+            return 1
+        print(f"{result.event.event_type}: '{args.from_title}'")
         return 0
 
     if args.command == "link-project-to-area":

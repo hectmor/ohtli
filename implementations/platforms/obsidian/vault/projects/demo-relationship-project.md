@@ -13,6 +13,11 @@ relationships:
   target_id: 179b08b5-168c-440d-b46c-5681954ba089
   target_type: area
   target_link: '[[areas/demo-health-area|Demo Health Area]]'
+- id: 43cdabd3-dd51-42d9-8bb8-cd48b25b8725
+  type: references
+  target_id: 4c2dffdc-4a5a-4c63-afff-171313f8cab4
+  target_type: resource
+  target_link: '[[resources/demo-resource-slice|Demo Resource Slice]]'
 ---
 
 # Demo Relationship Project

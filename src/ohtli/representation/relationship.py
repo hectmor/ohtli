@@ -64,20 +64,32 @@ def relate(
 
 
 def unrelate(
-    representation: dict[str, Any], *, relationship_type: str, today: date | None = None
+    representation: dict[str, Any],
+    *,
+    relationship_type: str,
+    target_id: str | None = None,
+    today: date | None = None,
 ) -> dict[str, Any]:
-    """Remove every Relationship Instance of one type from a note.
+    """Remove Relationship Instances of one type from a note.
 
-    When the removed instance was the last one, the `relationships` key
-    is removed entirely, returning the note to exactly the shape of a
-    never-linked one. Pure: never mutates its input.
+    With `target_id`, removes only the instance(s) pointing at that
+    target and keeps the rest — required for a `0..*` relationship,
+    which can hold many targets. Without it, removes every instance of
+    the type (the `0..1` case, where there is at most one).
+
+    When nothing of any type remains, the `relationships` key is removed
+    entirely, returning the note to exactly the shape of a never-linked
+    one. Pure: never mutates its input.
     """
     today = today or date.today()
     properties = dict(representation["properties"])
     remaining = [
         entry
         for entry in (properties.get(RELATIONSHIPS_KEY) or [])
-        if entry.get("type") != relationship_type
+        if not (
+            entry.get("type") == relationship_type
+            and (target_id is None or entry.get("target_id") == target_id)
+        )
     ]
     if remaining:
         properties[RELATIONSHIPS_KEY] = remaining
