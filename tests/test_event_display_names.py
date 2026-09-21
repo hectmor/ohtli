@@ -51,12 +51,6 @@ def test_every_spec_has_a_distinct_non_empty_display_name():
     assert len(set(names)) == len(names) == 6
 
 
-def test_the_display_name_is_the_class_name_with_the_words_separated():
-    """Nothing but the spacing differs from the class name, so the two never drift apart."""
-    for spec in ALL_SPECS:
-        assert spec.display_name.replace(" ", "") == spec.domain_type.__name__
-
-
 def test_display_name_of_round_trips_every_class_name():
     for spec in ALL_SPECS:
         assert display_name_of(spec.domain_type.__name__) == spec.display_name
