@@ -200,3 +200,18 @@ def display_name_of(type_name: str) -> str:
         if spec.domain_type.__name__ == type_name:
             return spec.display_name
     raise KeyError(f"no Domain Object spec is named {type_name!r}")
+
+
+def spec_by_note_type(note_type: str) -> DomainSpec:
+    """The spec for a `note_type` value (e.g. `"project"`).
+
+    A relationship instance stores its target's kind as this string
+    (`relationship-representation.md`'s `target_type`), not a class name, so
+    resolving it back to a directory/spec needs this lookup rather than
+    `display_name_of`'s. Raises on an unknown value for the same reason
+    `display_name_of` does: silently returning nothing would hide a real bug.
+    """
+    for spec in ALL_SPECS:
+        if spec.note_type == note_type:
+            return spec
+    raise KeyError(f"no Domain Object spec has note_type {note_type!r}")

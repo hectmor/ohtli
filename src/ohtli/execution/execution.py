@@ -10,14 +10,16 @@ from typing import Any, Callable
 from ohtli.domain.area import Area
 from ohtli.domain.project import Project
 from ohtli.event.event import Event
-from ohtli.execution.specs import AREA, PROJECT, DomainSpec, display_name_of
+from ohtli.execution.specs import AREA, PROJECT, DomainSpec, display_name_of, spec_by_note_type
 from ohtli.representation import context as archive_transform
+from ohtli.representation.context import HISTORICAL, OPERATIONAL
 from ohtli.representation import notes as notes_transform
 from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io import paths
 from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.markdown import (
+    find_note_by_id,
     list_projects_linking_to,
     read_inbox_entry,
     resolve_inbox_entry,
@@ -252,6 +254,11 @@ class ArchiveResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
+    # Only set by Archive (never Reactivate) when not applicable: "missing",
+    # "wrong_context", or "operational_dependents". `archive-workflow.md`
+    # ("Archive does not determine how the dependency should be resolved")
+    # means the human needs to be told which one, not just that it failed.
+    reason: str | None = None
 
 
 def _execute_contextual_transition(
@@ -290,6 +297,57 @@ def _execute_contextual_transition(
     return ArchiveResult(request=request, applicable=True, project=domain_object, path=path, event=event)
 
 
+def read_operational_dependents(
+    title: str, spec: DomainSpec, *, base_dir: Path | None = None
+) -> tuple[dict[str, Any], ...]:
+    """The still-operational objects `title` (of `spec`'s type) is required
+    by, per `archive-workflow.md`'s Operational Integrity: the targets of
+    `title`'s own `archive_workflow.OPERATIONALLY_REQUIRING_TYPES`
+    relationships (today: `supports`) whose `context` is still `operational`.
+
+    Not an `execute_*` operation: a read, no actor, no request, no event —
+    same precedent as `read_contained_projects`. Empty when the note doesn't
+    exist, has no such relationships, or every target has gone historical or
+    is unresolvable (`find_note_by_id` treats a dangling `target_id` as "no
+    dependency", not an error).
+
+    The target's directory is derived from `base_dir`'s sibling by
+    `note_type` when `base_dir` is given (the convention every multi-type
+    test in this codebase already follows: `tmp_path / spec.note_type` per
+    type, sharing one parent), or from the target spec's own real-vault
+    default otherwise.
+    """
+    path = spec.file_path(title, base_dir=base_dir)
+    if not path.exists():
+        return ()
+
+    representation = spec.read(path)
+    entries = representation["properties"].get("relationships") or []
+
+    dependents = []
+    for entry in entries:
+        if entry.get("type") not in archive_workflow.OPERATIONALLY_REQUIRING_TYPES:
+            continue
+        target_type, target_id = entry.get("target_type"), entry.get("target_id")
+        if not target_type or not target_id:
+            continue
+        target_spec = spec_by_note_type(target_type)
+        target_dir = (
+            base_dir.parent / target_spec.note_type
+            if base_dir is not None
+            else target_spec.file_path("_", base_dir=None).parent
+        )
+        found = find_note_by_id(target_dir, target_id)
+        # A note with no `context` field (pre-Phase-13, still a supported
+        # shape: `test_a_pre_phase_13_note_without_context_can_be_linked`)
+        # was never explicitly archived, so it is implicitly operational —
+        # `operational` is what every note starts as; only Archive ever
+        # writes `historical`. Only an explicit `historical` clears the block.
+        if found is not None and found["context"] != HISTORICAL:
+            dependents.append(found)
+    return tuple(dependents)
+
+
 def execute_archive(
     request: ArchiveRequest,
     *,
@@ -303,16 +361,37 @@ def execute_archive(
     Only `context` (and `updated`) change; `status`, `id`, and the
     file's path are untouched — Archive is not a lifecycle transition
     (`archive-workflow.md`'s Lifecycle Independence invariant).
+
+    Refused, per Operational Integrity, while another operational object
+    still `supports`-requires this one — checked via `read_operational_
+    dependents` before the actual (unchanged) applicability/transition
+    machinery runs, so `_execute_contextual_transition` and Reactivate's
+    path stay untouched.
     """
-    return _execute_contextual_transition(
+    dependents = read_operational_dependents(request.title, spec, base_dir=base_dir)
+    result = _execute_contextual_transition(
         request,
         spec=spec,
         base_dir=base_dir,
         events_dir=events_dir,
-        is_applicable=archive_workflow.is_applicable,
+        is_applicable=lambda ctx: archive_workflow.is_applicable(
+            ctx, has_operational_dependents=bool(dependents)
+        ),
         transition=archive_transform.archive,
         event_verb="Archived",
         workflow="archive",
+    )
+    if result.applicable:
+        return result
+
+    if not spec.file_path(request.title, base_dir=base_dir).exists():
+        reason = "missing"
+    elif dependents:
+        reason = "operational_dependents"
+    else:
+        reason = "wrong_context"
+    return ArchiveResult(
+        request=result.request, applicable=False, project=None, path=None, event=None, reason=reason
     )
 
 
