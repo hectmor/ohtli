@@ -179,6 +179,39 @@ def _list_notes_linking_to(directory: Path, target_id: str, relationship_type: s
     return sorted(found, key=lambda note: note["title"])
 
 
+def find_note_by_id(directory: Path, target_id: str) -> dict[str, Any] | None:
+    """The note in a directory whose stable `id` matches `target_id`, or `None`.
+
+    Used to resolve a relationship's `target_id` back to a live note's current
+    `context` — Archive's Operational Integrity check needs this: a relationship
+    only ever stores a title-independent id (`Stable Relationship References`),
+    never a live reference, so resolving it means scanning by id, the same way
+    `_list_notes_linking_to` scans by relationship. A dangling `target_id` (the
+    target note no longer exists) returns `None` rather than raising: the caller
+    treats "nothing to resolve" as "no dependency", not an error.
+
+    Read directly from the vault on every call; it writes nothing.
+    """
+    if not directory.exists():
+        return None
+
+    for md_file in directory.glob("*.md"):
+        if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+            continue
+        representation = read_note(md_file)
+        properties = representation["properties"] or {}
+        if properties.get("id") != target_id:
+            continue
+        return {
+            "id": properties.get("id"),
+            "title": representation["title"],
+            "status": properties.get("status"),
+            "context": properties.get("context"),
+            "path": md_file,
+        }
+    return None
+
+
 def list_projects_linking_to(
     target_id: str, relationship_type: str, *, base_dir: Path | None = None
 ) -> list[dict[str, Any]]:

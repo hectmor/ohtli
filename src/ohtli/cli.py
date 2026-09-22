@@ -23,6 +23,7 @@ from ohtli.execution.execution import (
     execute_review,
     execute_unrelate,
     read_contained_projects,
+    read_operational_dependents,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE, display_name_of
 from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries
@@ -441,7 +442,16 @@ def main(argv: list[str] | None = None) -> int:
         request = ArchiveRequest(title=args.title, actor=Actor.HUMAN)
         result = execute(request, spec=spec)
         if not result.applicable:
-            print(f"Not applicable: '{args.title}' cannot be {operation}d.")
+            if result.reason == "operational_dependents":
+                dependents = read_operational_dependents(args.title, spec)
+                names = ", ".join(f"'{d['title']}'" for d in dependents)
+                print(
+                    f"Not applicable: '{args.title}' cannot be archived. It is still required "
+                    f"operationally by {names}. Archive does not resolve this: unlink it, or "
+                    f"archive the object(s) requiring it, first."
+                )
+            else:
+                print(f"Not applicable: '{args.title}' cannot be {operation}d.")
             return 1
         print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
         return 0
