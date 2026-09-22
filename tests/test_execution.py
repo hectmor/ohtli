@@ -84,24 +84,28 @@ def test_processing_does_not_occur_when_entry_has_no_derivable_title(tmp_path):
     assert entry_path.exists(), "a non-applicable Inbox entry must remain untouched"
 
 
-def test_processing_does_not_occur_when_title_already_exists(tmp_path):
+def test_processing_updates_the_existing_object_when_the_title_already_exists(tmp_path):
+    """Was `test_processing_does_not_occur_when_title_already_exists`: a
+    title collision means Update, not refusal (Phase 34)."""
     projects_dir = tmp_path / "projects"
     first_entry = tmp_path / "first-entry.md"
     first_entry.write_text("Duplicate Title\n", encoding="utf-8")
-    execute_processing(
+    first = execute_processing(
         ProcessingRequest(entry_path=first_entry, actor=Actor.HUMAN), base_dir=projects_dir
     )
 
     second_entry = tmp_path / "second-entry.md"
-    second_entry.write_text("Duplicate Title\n", encoding="utf-8")
+    second_entry.write_text("Duplicate Title\n\nSecond entry's own text.\n", encoding="utf-8")
     result = execute_processing(
         ProcessingRequest(entry_path=second_entry, actor=Actor.DETERMINISTIC), base_dir=projects_dir
     )
 
-    assert not result.applicable
-    assert result.project is None
-    assert result.path is None
-    assert second_entry.exists()
+    assert result.applicable and result.operation == "update"
+    assert result.project.id == first.project.id
+    assert result.path == first.path
+    assert not second_entry.exists(), "resolved either way"
+    assert "Second entry's own text." in result.path.read_text(encoding="utf-8")
+    assert result.event.event_type == "Project Updated"
 
 
 def test_capture_executes_for_a_different_domain_object_via_spec(tmp_path):

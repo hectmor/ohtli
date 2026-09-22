@@ -12,6 +12,7 @@ from ohtli.domain.project import Project
 from ohtli.event.event import Event
 from ohtli.execution.specs import AREA, PROJECT, DomainSpec, display_name_of
 from ohtli.representation import context as archive_transform
+from ohtli.representation import notes as notes_transform
 from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io import paths
@@ -150,6 +151,9 @@ class ProcessingResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
+    # "create" or "update"; `None` when `applicable` is False. Lets the CLI
+    # choose its wording without parsing `event.event_type`.
+    operation: str | None = None
 
 
 def execute_processing(
@@ -178,8 +182,38 @@ def execute_processing(
     raw_text = read_inbox_entry(request.entry_path)
     existing_titles = spec.list_existing_titles(base_dir=base_dir)
 
-    if not processing.is_applicable(raw_text, existing_titles):
+    if not processing.is_applicable(raw_text):
         return ProcessingResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    if processing.is_update(raw_text, existing_titles):
+        title = processing.derive_title(raw_text)
+        path = spec.file_path(title, base_dir=base_dir)
+        representation = spec.read(path)
+        entry_text = processing.derive_notes(raw_text)
+
+        event = None
+        if entry_text is not None:
+            representation = notes_transform.apply_update(
+                representation, heading=spec.notes_heading, entry_text=entry_text
+            )
+            rewrite_note(path, representation)
+
+        domain_object = spec.from_representation(representation)
+        resolve_inbox_entry(request.entry_path)
+
+        if entry_text is not None:
+            event = _emit(
+                event_type=f"{spec.display_name} Updated",
+                domain_object=domain_object,
+                actor=request.actor,
+                execution_id=request.execution_id,
+                workflow="processing",
+                events_dir=events_dir,
+            )
+
+        return ProcessingResult(
+            request=request, applicable=True, project=domain_object, path=path, event=event, operation="update"
+        )
 
     domain_object = processing.transform(raw_text, spec.domain_type)
     representation = spec.to_representation(domain_object, notes=processing.derive_notes(raw_text))
@@ -194,7 +228,9 @@ def execute_processing(
         events_dir=events_dir,
     )
 
-    return ProcessingResult(request=request, applicable=True, project=domain_object, path=path, event=event)
+    return ProcessingResult(
+        request=request, applicable=True, project=domain_object, path=path, event=event, operation="create"
+    )
 
 
 @dataclass(frozen=True)

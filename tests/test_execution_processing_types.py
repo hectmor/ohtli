@@ -5,6 +5,8 @@ land in the one section no Essential Attribute/Responsibility claims: `Notes`,
 or `Discussion` for Meeting.
 """
 
+import re
+
 import pytest
 
 from ohtli.execution.execution import Actor, ProcessingRequest, execute_processing
@@ -79,17 +81,33 @@ def test_processing_emits_a_created_event_from_the_processing_workflow(tmp_path,
 
 
 @pytest.mark.parametrize("spec,folder,heading", CASES)
-def test_a_duplicate_title_is_refused_with_no_effects(tmp_path, spec, folder, heading):
-    _process(tmp_path, spec, folder, _entry(tmp_path, name="first.md"))
+def test_a_duplicate_title_updates_the_existing_object_instead_of_being_refused(tmp_path, spec, folder, heading):
+    """Was `test_a_duplicate_title_is_refused_with_no_effects`: a title
+    collision is no longer refused, it means Update (Phase 34)."""
+    first = _process(tmp_path, spec, folder, _entry(tmp_path, name="first.md"))
+    before = spec.read(first.path)
     second = _entry(tmp_path, text="From Inbox\n\nother body\n", name="second.md")
-    files_before = sorted(p.name for p in (tmp_path / folder).iterdir())
 
     result = _process(tmp_path, spec, folder, second)
 
-    assert not result.applicable and result.event is None and result.path is None
-    assert second.exists(), "a refused entry stays in the Inbox"
-    assert sorted(p.name for p in (tmp_path / folder).iterdir()) == files_before
-    assert len(read_events(events_dir=tmp_path)) == 1
+    assert result.applicable and result.operation == "update"
+    assert result.project.id == first.project.id
+    assert not second.exists(), "the entry is resolved either way"
+    assert sorted(p.name for p in (tmp_path / folder).iterdir()) == [first.path.name]
+
+    after = spec.read(result.path)
+    for key in ("id", "status", "context", "created", "note_type"):
+        assert after["properties"][key] == before["properties"][key], key
+
+    assert "other body" in _section(after["body"], heading)
+    other_headings = [h for h in re.findall(r"^## .+$", after["body"], re.MULTILINE) if h != heading]
+    for other in other_headings:
+        assert "other body" not in _section(after["body"], other), f"leaked into {other}"
+
+    assert result.event.event_type == f"{spec.display_name} Updated"
+    assert result.event.object_id == first.project.id
+    assert result.event.workflow == "processing"
+    assert len(read_events(events_dir=tmp_path)) == 2
 
 
 @pytest.mark.parametrize("spec,folder,heading", CASES)

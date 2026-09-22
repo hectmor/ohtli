@@ -197,6 +197,16 @@ def _derive_title(raw_text: str) -> str | None:
     return _split_entry(raw_text)[0]
 
 
+def derive_title(raw_text: str) -> str | None:
+    """The title a raw Inbox entry would become, if any.
+
+    Exposed alongside `derive_notes` so Execution can look up an existing
+    object by title on the Update path, before `transform()` runs (Update
+    never calls `transform`: the object it acts on already exists).
+    """
+    return _derive_title(raw_text)
+
+
 def derive_notes(raw_text: str) -> str | None:
     """The body content of a raw Inbox entry, if any.
 
@@ -208,15 +218,34 @@ def derive_notes(raw_text: str) -> str | None:
     return _split_entry(raw_text)[1]
 
 
-def is_applicable(raw_text: str, existing_titles: set[str]) -> bool:
-    """Processing is applicable only if a non-empty title can be derived
-    from the entry, and no Project with that title already exists.
+def is_applicable(raw_text: str) -> bool:
+    """Processing is applicable whenever a non-empty title can be derived
+    from the entry.
+
+    A derivable title is always actionable: Create when no object of the
+    chosen type is named that yet, Update when one already is (`is_update`).
+    Only a blank entry (no derivable title) is not applicable. Unlike
+    `is_update`, this needs no `existing_titles`: it no longer decides
+    between Create and Update, only whether Processing can do anything
+    at all.
 
     Applicability is evaluated independently from, and prior to,
     Execution.
     """
+    return _derive_title(raw_text) is not None
+
+
+def is_update(raw_text: str, existing_titles: set[str]) -> bool:
+    """Whether processing this entry means Update rather than Create:
+    true when its derived title already names an existing object of the
+    chosen type.
+
+    Meaningful only once `is_applicable` holds; a blank entry (no
+    derivable title) is neither Create- nor Update-applicable, and this
+    returns `False` for it too.
+    """
     title = _derive_title(raw_text)
-    return title is not None and title not in existing_titles
+    return title is not None and title in existing_titles
 
 
 def transform(raw_text: str, domain_factory: Callable[..., T] = Project) -> T:

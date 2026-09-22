@@ -204,16 +204,20 @@ def test_a_named_entry_that_processing_refuses_stays_and_the_others_are_processe
     assert _notes(tmp_path) == ["one.md"]
 
 
-def test_a_duplicate_title_is_refused_and_the_entry_stays(capsys, tmp_path):
+def test_a_duplicate_title_updates_the_existing_note_via_named_processing(capsys, tmp_path):
+    """Was `test_a_duplicate_title_is_refused_and_the_entry_stays`: a title
+    collision updates instead of being refused (Phase 34)."""
     _seed(tmp_path)
     _run(capsys, "process-inbox", "--entry", "one")
     _write(tmp_path, "one-again.md", "One\n\nagain\n")
 
     code, out = _run(capsys, "process-inbox", "--entry", "one-again")
 
-    assert code == 1 and "'one-again.md' left untouched in Inbox" in out
-    assert (tmp_path / "inbox" / "one-again.md").exists()
-    assert len(_events(tmp_path)) == 1
+    assert code == 0 and "Updated Project 'One'" in out
+    assert not (tmp_path / "inbox" / "one-again.md").exists(), "resolved either way"
+    assert _notes(tmp_path) == ["one.md"], "still just the one Project note"
+    assert "again" in (tmp_path / "projects" / "one.md").read_text(encoding="utf-8")
+    assert len(_events(tmp_path)) == 2
 
 
 def test_the_same_title_can_still_become_a_different_domain_object(capsys, tmp_path):
