@@ -75,9 +75,11 @@ Each document describes a different aspect of the framework.
 
 # Project Status
 
-Ohtli is currently under active design.
+Ohtli has moved from architecture into a working reference implementation.
 
-The focus of the current development stage is establishing a stable architecture before implementing tooling, automation, and plugins.
+All six Domain Objects (Project, Area, Resource, Reference, Meeting, Journal Entry), their workflows (Capture, Processing, Archive/Reactivate, Evaluate, Review, Knowledge), and the full Interaction Model (all 16 canonical relationships between Domain Objects) are implemented in Python, exercised through a command-line interface, and covered by an automated test suite. Events are recorded for every operation.
+
+Not yet built: Obsidian dashboards and views beyond static navigation, and automation (triggers, scheduling, AI-assisted workflows).
 
 ---
 
@@ -92,11 +94,16 @@ The focus of the current development stage is establishing a stable architecture
 * Operations Manual
 * Templates
 
+Complete.
+
 ## Phase 1 — Reference Implementation
 
 * Obsidian reference vault
 * Core workflows
 * Basic dashboards
+
+The reference vault and core workflows are implemented and tested. Basic dashboards
+do not exist yet beyond a static workspace note.
 
 ## Phase 2 — Stabilization
 
