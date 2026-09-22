@@ -3,22 +3,43 @@ from ohtli.workflow import processing
 
 
 def test_processing_is_applicable_when_title_is_derivable_and_new():
-    assert processing.is_applicable("New Idea\n\nSome notes.", existing_titles=set())
+    assert processing.is_applicable("New Idea\n\nSome notes.")
 
 
-def test_processing_is_not_applicable_when_derived_title_already_exists():
-    assert not processing.is_applicable("Existing\n\nNotes.", existing_titles={"Existing"})
+def test_processing_is_still_applicable_when_the_derived_title_already_exists():
+    """A title collision no longer refuses Processing: it means Update
+    instead of Create (`is_update`), not "not applicable"."""
+    assert processing.is_applicable("Existing\n\nNotes.")
 
 
 def test_processing_is_not_applicable_when_entry_has_no_content():
-    assert not processing.is_applicable("\n   \n", existing_titles=set())
+    assert not processing.is_applicable("\n   \n")
 
 
 def test_processing_strips_markdown_heading_marks_from_derived_title():
-    assert processing.is_applicable("# Website Relaunch\n\nNotes.", existing_titles=set())
-    assert not processing.is_applicable(
+    assert processing.is_applicable("# Website Relaunch\n\nNotes.")
+
+
+def test_is_update_is_false_when_the_derived_title_is_new():
+    assert not processing.is_update("New Idea\n\nSome notes.", existing_titles=set())
+
+
+def test_is_update_is_true_when_the_derived_title_already_exists():
+    assert processing.is_update("Existing\n\nNotes.", existing_titles={"Existing"})
+
+
+def test_is_update_strips_markdown_heading_marks_from_the_derived_title_too():
+    assert processing.is_update(
         "# Website Relaunch\n\nNotes.", existing_titles={"Website Relaunch"}
     )
+    assert not processing.is_update("# Website Relaunch\n\nNotes.", existing_titles=set())
+
+
+def test_is_update_is_false_for_a_blank_entry_even_if_the_title_would_collide():
+    """A blank entry has no derivable title, so it cannot match anything in
+    `existing_titles` — is_update is false, and is_applicable is false too,
+    so it is refused rather than silently treated as an update."""
+    assert not processing.is_update("\n   \n", existing_titles={"Anything"})
 
 
 def test_processing_transform_produces_a_project_with_derived_title():

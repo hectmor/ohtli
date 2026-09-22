@@ -64,6 +64,11 @@ class DomainSpec:
     # ("Journal Entry Created"), as opposed to the Python class name
     # (`JournalEntry`) that identifies the type in code and in `object_type`.
     display_name: str
+    # The heading Processing's Update appends new Inbox-derived text under
+    # (`representation/notes.py::append_under_heading`) — the same section
+    # Create already carries `notes=` into. Explicit, not derived from the
+    # body template: every type but Meeting uses `## Notes`.
+    notes_heading: str
     to_representation: Callable[..., dict[str, Any]]
     from_representation: Callable[[dict[str, Any]], Any]
     write: Callable[..., Path]
@@ -77,6 +82,7 @@ PROJECT = DomainSpec(
     domain_type=Project,
     note_type="project",
     display_name="Project",
+    notes_heading="## Notes",
     to_representation=project_to_representation,
     from_representation=project_from_representation,
     write=write_project,
@@ -97,6 +103,7 @@ AREA = DomainSpec(
     domain_type=Area,
     note_type="area",
     display_name="Area",
+    notes_heading="## Notes",
     to_representation=area_to_representation,
     from_representation=area_from_representation,
     write=write_area,
@@ -116,6 +123,7 @@ RESOURCE = DomainSpec(
     domain_type=Resource,
     note_type="resource",
     display_name="Resource",
+    notes_heading="## Notes",
     to_representation=resource_to_representation,
     from_representation=resource_from_representation,
     write=write_resource,
@@ -134,6 +142,7 @@ REFERENCE = DomainSpec(
     domain_type=Reference,
     note_type="reference",
     display_name="Reference",
+    notes_heading="## Notes",
     to_representation=reference_to_representation,
     from_representation=reference_from_representation,
     write=write_reference,
@@ -148,6 +157,7 @@ MEETING = DomainSpec(
     domain_type=Meeting,
     note_type="meeting",
     display_name="Meeting",
+    notes_heading="## Discussion",
     to_representation=meeting_to_representation,
     from_representation=meeting_from_representation,
     write=write_meeting,
@@ -163,6 +173,7 @@ JOURNAL_ENTRY = DomainSpec(
     domain_type=JournalEntry,
     note_type="journal_entry",
     display_name="Journal Entry",
+    notes_heading="## Notes",
     to_representation=journal_entry_to_representation,
     from_representation=journal_entry_from_representation,
     write=write_journal_entry,

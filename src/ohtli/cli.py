@@ -408,7 +408,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.")
                 continue
             label = args.kind.replace("-", " ").title()
-            print(f"Processed {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            if result.operation == "update":
+                # No new text to add (blank remainder) still resolves the
+                # entry, but writes and emits nothing: say so honestly
+                # instead of claiming an update that did not happen.
+                verb = "Updated" if result.event is not None else "Resolved"
+            else:
+                verb = "Processed"
+            print(f"{verb} {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
         # Batch mode keeps exiting 0 when it refuses entries; an entry the user
         # asked for by name that could not be processed is a failure.
         return 1 if (named and refused) else 0
