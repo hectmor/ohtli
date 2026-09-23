@@ -19,6 +19,10 @@ JOURNAL_ENTRIES_DIR = (
 )
 INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
 EVENTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / ".ohtli"
+# Generated (derived) dashboards live in a folder of their own that nothing else
+# reads or writes, so they can never collide with a Domain Object note or be
+# overwritten by a Capture, and no path-based lookup can mistake one for an Area.
+AREA_DASHBOARDS_DIR = VAULT_DIR / "dashboards" / "areas"
 
 
 def slugify(title: str) -> str:
@@ -38,6 +42,17 @@ def project_file_path(title: str, base_dir: Path | None = None) -> Path:
 
 def area_file_path(title: str, base_dir: Path | None = None) -> Path:
     return _note_file_path(title, AREAS_DIR, base_dir)
+
+
+def area_dashboard_file_path(area_title: str, base_dir: Path | None = None) -> Path:
+    """Where an Area's generated dashboard lives: `<area-slug>-dashboard.md`.
+
+    Built from the Area's own slug plus a fixed suffix (not by slugifying
+    "<title> Dashboard"), so the file name always shares the Area note's stem,
+    even for a title that slugifies to nothing (`untitled`).
+    """
+    base = base_dir if base_dir is not None else AREA_DASHBOARDS_DIR
+    return base / f"{slugify(area_title)}-dashboard.md"
 
 
 def resource_file_path(title: str, base_dir: Path | None = None) -> Path:

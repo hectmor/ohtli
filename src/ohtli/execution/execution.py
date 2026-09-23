@@ -11,6 +11,7 @@ from ohtli.domain.area import Area
 from ohtli.domain.project import Project
 from ohtli.event.event import Event
 from ohtli.execution.specs import AREA, PROJECT, DomainSpec, display_name_of, spec_by_note_type
+from ohtli.representation import area_dashboard
 from ohtli.representation import context as archive_transform
 from ohtli.representation.context import HISTORICAL, OPERATIONAL
 from ohtli.representation import notes as notes_transform
@@ -18,6 +19,7 @@ from ohtli.representation import relationship as relationship_transform
 from ohtli.representation import understanding as understanding_transform
 from ohtli.vault_io import paths
 from ohtli.vault_io.events import append_event, read_events
+from ohtli.vault_io.generated import write_generated_file
 from ohtli.vault_io.markdown import (
     find_note_by_id,
     list_projects_linking_to,
@@ -885,3 +887,100 @@ def read_contained_projects(
         area_id, derived.via.relationship_type, base_dir=project_base_dir
     )
     return ContainedProjectsResult(applicable=True, projects=tuple(projects))
+
+
+@dataclass(frozen=True)
+class AreaDashboardResult:
+    applicable: bool
+    markdown: str | None
+    area_title: str | None
+
+
+def read_area_dashboard(
+    area_title: str,
+    *,
+    area_base_dir: Path | None = None,
+    project_base_dir: Path | None = None,
+) -> AreaDashboardResult:
+    """Render an Area Dashboard: a read-only Projection of one Area and the
+    Projects that belong to it.
+
+    Not an `execute_*` operation: no actor, no request, no event, and nothing
+    is written, because a projection is not a change to any Domain Object (the
+    same precedent as `read_contained_projects`, which this composes). The
+    notes stay the single source of truth; this only renders what they say now.
+
+    Applicable only when the Area exists. The Area's title comes from its note,
+    not from `area_title`, so the rendering is identical however the caller
+    spelled it. Archived Projects are included, in their own section.
+    """
+    contained = read_contained_projects(
+        area_title, area_base_dir=area_base_dir, project_base_dir=project_base_dir
+    )
+    if not contained.applicable:
+        return AreaDashboardResult(applicable=False, markdown=None, area_title=None)
+
+    area_path = AREA.file_path(area_title, base_dir=area_base_dir)
+    area = AREA.read(area_path)
+    title = area["title"]
+    markdown = area_dashboard.render(
+        area_title=title,
+        area_link=_link_display(area_path, title),
+        area_historical=area["properties"].get("context") == HISTORICAL,
+        projects=[
+            {
+                "link": _link_display(project["path"], project["title"]),
+                "status": project["status"],
+                "context": project["context"],
+            }
+            for project in contained.projects
+        ],
+    )
+    return AreaDashboardResult(applicable=True, markdown=markdown, area_title=title)
+
+
+@dataclass(frozen=True)
+class AreaDashboardWriteResult:
+    applicable: bool
+    # "created" / "updated" / "unchanged" / "refused"; `None` when not applicable.
+    outcome: str | None
+    path: Path | None
+    markdown: str | None
+    area_title: str | None = None
+
+
+def write_area_dashboard(
+    area_title: str,
+    *,
+    area_base_dir: Path | None = None,
+    project_base_dir: Path | None = None,
+    dashboard_base_dir: Path | None = None,
+) -> AreaDashboardWriteResult:
+    """Write an Area's generated dashboard into the vault, guarded.
+
+    Not an `execute_*` operation, and it emits no event: the file is a copy
+    derived from other notes, never an input to anything, and changes no Domain
+    Object. It is regenerated whole and overwritten only if it is recognisably a
+    file this feature generated (`vault_io.generated.write_generated_file`); a
+    hand-written file at the same path is refused and left untouched.
+
+    The Area must exist, checked BEFORE any path is computed or any folder is
+    created, so an unknown Area leaves the vault exactly as it was.
+    `dashboard_base_dir` defaults to the real vault's dashboards folder; tests
+    pass a temporary directory.
+    """
+    dashboard = read_area_dashboard(
+        area_title, area_base_dir=area_base_dir, project_base_dir=project_base_dir
+    )
+    if not dashboard.applicable:
+        return AreaDashboardWriteResult(applicable=False, outcome=None, path=None, markdown=None)
+
+    path = paths.area_dashboard_file_path(dashboard.area_title, base_dir=dashboard_base_dir)
+    outcome = write_generated_file(path, dashboard.markdown, marker=area_dashboard.GENERATED_MARKER)
+    return AreaDashboardWriteResult(
+        applicable=True,
+        outcome=outcome,
+        path=path,
+        markdown=dashboard.markdown,
+        area_title=dashboard.area_title,
+    )

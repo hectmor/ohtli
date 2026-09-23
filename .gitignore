@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .venv/
+
+# Generated dashboards (`ohtli area-dashboard --write`): regenerable copies of other
+# notes, so they must not sit stale in the reference vault.
+implementations/platforms/obsidian/vault/dashboards/

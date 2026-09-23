@@ -15,3 +15,6 @@ def _isolate_events_dir(tmp_path, monkeypatch):
     don't pass it explicitly) don't need per-call-site edits.
     """
     monkeypatch.setattr(paths, "EVENTS_DIR", tmp_path / "events")
+    # Same protection for the generated dashboards folder: a test that forgets
+    # `dashboard_base_dir` must never write into the real vault.
+    monkeypatch.setattr(paths, "AREA_DASHBOARDS_DIR", tmp_path / "dashboards")
