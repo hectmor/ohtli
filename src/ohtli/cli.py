@@ -46,7 +46,22 @@ def main(argv: list[str] | None = None) -> int:
     # Never derive it with `.lower()`: `JournalEntry` is `journal-entry`.
     kind_of_type = {spec.domain_type.__name__: kind for kind, spec in spec_by_kind.items()}
 
-    parser = argparse.ArgumentParser(prog="ohtli")
+    parser = argparse.ArgumentParser(
+        prog="ohtli",
+        epilog="Global options such as --actor go before the command: ohtli --actor deterministic create-project X",
+    )
+    # Declared only here, never on a subparser: a subparser default would silently
+    # overwrite a value parsed before the command, recording `human` without an error.
+    parser.add_argument(
+        "--actor",
+        choices=[a.value for a in Actor],
+        default=Actor.HUMAN.value,
+        help=(
+            "Who is invoking this command (default: human). Recorded as the actor of every "
+            "Event it emits, for attribution only: it is not authentication or authorization "
+            "and grants no permission. Commands that emit no Event ignore it"
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     create = subparsers.add_parser("create-project", help="Capture a new Project")
@@ -237,9 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     enrich_resource.add_argument("--provenance", required=True, nargs="+")
 
     args = parser.parse_args(argv)
+    actor = Actor(args.actor)
 
     if args.command == "create-project":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request)
         if not result.applicable:
             print(f"Not applicable: a Project titled '{args.title}' already exists.")
@@ -248,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "create-area":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=AREA)
         if not result.applicable:
             print(f"Not applicable: an Area titled '{args.title}' already exists.")
@@ -257,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "create-resource":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=RESOURCE)
         if not result.applicable:
             print(f"Not applicable: a Resource titled '{args.title}' already exists.")
@@ -266,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "create-reference":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=REFERENCE)
         if not result.applicable:
             print(f"Not applicable: a Reference titled '{args.title}' already exists.")
@@ -345,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
                 RelateRequest(
                     source_title=args.from_title,
                     target_title=args.to_title,
-                    actor=Actor.HUMAN,
+                    actor=actor,
                     relationship_type=definition.relationship_type,
                 ),
                 source_spec=source_spec,
@@ -364,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         result = execute_unrelate(
             UnrelateRequest(
                 source_title=args.from_title,
-                actor=Actor.HUMAN,
+                actor=actor,
                 relationship_type=definition.relationship_type,
                 target_title=args.to_title,
             ),
@@ -382,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "link-project-to-area":
         request = RelateRequest(
-            source_title=args.project, target_title=args.area, actor=Actor.HUMAN
+            source_title=args.project, target_title=args.area, actor=actor
         )
         result = execute_relate(request)
         if not result.applicable:
@@ -395,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "unlink-project-from-area":
-        request = UnrelateRequest(source_title=args.project, actor=Actor.HUMAN)
+        request = UnrelateRequest(source_title=args.project, actor=actor)
         result = execute_unrelate(request)
         if not result.applicable:
             print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.")
@@ -404,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "create-journal-entry":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=JOURNAL_ENTRY)
         if not result.applicable:
             print(f"Not applicable: a Journal Entry titled '{args.title}' already exists.")
@@ -413,7 +429,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "create-meeting":
-        request = ExecutionRequest(title=args.title, actor=Actor.HUMAN)
+        request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=MEETING)
         if not result.applicable:
             print(f"Not applicable: a Meeting titled '{args.title}' already exists.")
@@ -447,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
 
         refused = 0
         for entry_path in entries:
-            request = ProcessingRequest(entry_path=entry_path, actor=Actor.HUMAN)
+            request = ProcessingRequest(entry_path=entry_path, actor=actor)
             result = execute_processing(request, spec=spec_by_kind[args.kind])
             if not result.applicable:
                 refused += 1
@@ -484,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
         spec = spec_by_kind[kind]
         execute = execute_archive if operation == "archive" else execute_reactivate
 
-        request = ArchiveRequest(title=args.title, actor=Actor.HUMAN)
+        request = ArchiveRequest(title=args.title, actor=actor)
         result = execute(request, spec=spec)
         if not result.applicable:
             if result.reason == "operational_dependents":
@@ -504,7 +520,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("evaluate-project", "evaluate-area"):
         spec = PROJECT if args.command == "evaluate-project" else AREA
         request = EvaluationRequest(
-            title=args.title, result=OperationalResult(args.result), actor=Actor.HUMAN
+            title=args.title, result=OperationalResult(args.result), actor=actor
         )
         result = execute_evaluation(request, spec=spec)
         if not result.applicable:
@@ -522,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
     ):
         _, _, kind = args.command.partition("-")
         spec = spec_by_kind[kind]
-        request = ReviewRequest(title=args.title, actor=Actor.HUMAN, since=args.since)
+        request = ReviewRequest(title=args.title, actor=actor, since=args.since)
         result = execute_review(request, spec=spec)
         if not result.applicable:
             print(f"Not applicable: '{args.title}' does not exist.")
@@ -541,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             understanding_title=args.understanding_title,
             understanding=args.understanding,
             provenance=tuple(args.provenance),
-            actor=Actor.HUMAN,
+            actor=actor,
         )
         result = execute_knowledge(request, spec=spec)
         if not result.applicable:

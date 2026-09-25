@@ -5,6 +5,7 @@ Human-facing CLI (ohtli/cli.py) also serves a Deterministic actor, with
 no actor-specific branching anywhere in domain, workflow, or execution
 code. Ohtli has no trigger source of its own: something outside it (a cron
 job, a file-watcher, a person) invokes this script, and that is the Trigger.
+The CLI can do the same for any command: `ohtli --actor deterministic <command>`.
 
 Usage:
     python scripts/deterministic_trigger.py --vault DIR [TITLE]
