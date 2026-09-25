@@ -7,16 +7,23 @@ from ohtli.domain.project import Project
 T = TypeVar("T")
 
 
-def is_applicable(title: str, existing_titles: set[str]) -> bool:
+def is_applicable(title: str, existing_titles: set[str], *, target_occupied: bool) -> bool:
     """Capture is applicable only if no object of this type with this
-    title exists yet.
+    title exists yet AND the file this title would be written to is free.
+
+    A note is named by the slug of its title, so a new title can still land
+    on a file that is already there: a hand-made note, or another title with
+    the same slug ("Foo Bar" and "foo-bar"). The title check alone cannot see
+    that, so `target_occupied` is required: no caller can forget it. Whether
+    the path is occupied is a fact about the vault, gathered by Execution;
+    this stays a pure predicate.
 
     Applicability is evaluated independently from, and prior to,
     Execution. This check carries no Project-specific knowledge, so it
     already applies unchanged to any Domain Object Capture is asked to
     preserve.
     """
-    return title not in existing_titles
+    return title not in existing_titles and not target_occupied
 
 
 def transform(title: str, domain_factory: Callable[..., T] = Project) -> T:

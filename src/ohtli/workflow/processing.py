@@ -235,6 +235,21 @@ def is_applicable(raw_text: str) -> bool:
     return _derive_title(raw_text) is not None
 
 
+def is_create_applicable(*, target_occupied: bool) -> bool:
+    """A Create is applicable only if the file its title maps to is free.
+
+    Meaningful once `is_applicable` holds and `is_update` does not. Only
+    Create asks this: Update rewrites the note that already holds the path,
+    so an occupied path is exactly what it expects. The Update/Create choice
+    compares TITLES, so an entry "foo-bar" is a Create while "Foo Bar"
+    exists, and would have overwritten `foo-bar.md`. Capture owns the same
+    rule; workflows never call each other, so each keeps its own copy.
+
+    Pure: whether the path is occupied is gathered by Execution.
+    """
+    return not target_occupied
+
+
 def is_update(raw_text: str, existing_titles: set[str]) -> bool:
     """Whether processing this entry means Update rather than Create:
     true when its derived title already names an existing object of the

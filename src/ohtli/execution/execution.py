@@ -21,6 +21,7 @@ from ohtli.vault_io import paths
 from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.generated import write_generated_file
 from ohtli.vault_io.markdown import (
+    inspect_target,
     find_note_by_id,
     list_projects_linking_to,
     read_inbox_entry,
@@ -97,6 +98,37 @@ class ExecutionResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
+    # Only set when a Capture is refused: why, and what is in the way.
+    # `title_exists`, `reserved_name`, `same_file_name` (another Ohtli note
+    # holds the file name; `occupant_title` names it) or `path_occupied`
+    # (something that is not an Ohtli note holds it). `blocked_path` is the
+    # file the title would have been written to.
+    reason: str | None = None
+    blocked_path: Path | None = None
+    occupant_title: str | None = None
+
+
+# File names never used for a note: the navigation notes every vault folder
+# keeps. Refusing the slugs keeps the behaviour the same on filesystems that do
+# not tell `README.md` from `readme.md`.
+_RESERVED_SLUGS = frozenset({"readme", "index"})
+
+
+def _target_state(
+    spec: DomainSpec, title: str, base_dir: Path | None
+) -> tuple[str | None, Path, str | None]:
+    """Whether the file `title` would be written to is free, gathered here so the
+    workflow predicates stay pure. Returns `(reason, path, occupant_title)`;
+    `reason` is `None` when the path is free."""
+    path = spec.file_path(title, base_dir=base_dir)
+    if paths.slugify(title) in _RESERVED_SLUGS:
+        return "reserved_name", path, None
+    occupant = inspect_target(path)
+    if occupant is None:
+        return None, path, None
+    if occupant["kind"] == "note":
+        return "same_file_name", path, occupant["title"]
+    return "path_occupied", path, None
 
 
 def execute_capture(
@@ -122,13 +154,40 @@ def execute_capture(
     `events_dir` is the equivalent for the Event log.
     """
     existing_titles = spec.list_existing_titles(base_dir=base_dir)
+    blocked, blocked_path, occupant_title = _target_state(spec, request.title, base_dir)
 
-    if not capture.is_applicable(request.title, existing_titles):
-        return ExecutionResult(request=request, applicable=False, project=None, path=None, event=None)
+    if not capture.is_applicable(request.title, existing_titles, target_occupied=blocked is not None):
+        if request.title in existing_titles:
+            return ExecutionResult(
+                request=request, applicable=False, project=None, path=None, event=None, reason="title_exists"
+            )
+        return ExecutionResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason=blocked,
+            blocked_path=blocked_path,
+            occupant_title=occupant_title,
+        )
 
     domain_object = capture.transform(request.title, spec.domain_type)
     representation = spec.to_representation(domain_object)
-    path = spec.write(representation, base_dir=base_dir)
+    try:
+        path = spec.write(representation, base_dir=base_dir)
+    except FileExistsError:
+        # Something appeared between the check and the write. Nothing was
+        # written, so nothing is emitted.
+        return ExecutionResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="path_occupied",
+            blocked_path=blocked_path,
+        )
     event = _emit(
         event_type=f"{spec.display_name} Created",
         domain_object=domain_object,
@@ -158,6 +217,12 @@ class ProcessingResult:
     # "create" or "update"; `None` when `applicable` is False. Lets the CLI
     # choose its wording without parsing `event.event_type`.
     operation: str | None = None
+    # Only set when a Create is refused because its file is taken: the same
+    # `reason`, `blocked_path` and `occupant_title` a refused Capture carries.
+    # A blank entry is refused without a reason.
+    reason: str | None = None
+    blocked_path: Path | None = None
+    occupant_title: str | None = None
 
 
 def execute_processing(
@@ -219,9 +284,35 @@ def execute_processing(
             request=request, applicable=True, project=domain_object, path=path, event=event, operation="update"
         )
 
+    blocked, blocked_path, occupant_title = _target_state(spec, processing.derive_title(raw_text), base_dir)
+    if not processing.is_create_applicable(target_occupied=blocked is not None):
+        return ProcessingResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason=blocked,
+            blocked_path=blocked_path,
+            occupant_title=occupant_title,
+        )
+
     domain_object = processing.transform(raw_text, spec.domain_type)
     representation = spec.to_representation(domain_object, notes=processing.derive_notes(raw_text))
-    path = spec.write(representation, base_dir=base_dir)
+    try:
+        path = spec.write(representation, base_dir=base_dir)
+    except FileExistsError:
+        # Something appeared between the check and the write: the entry stays
+        # in the Inbox and nothing is emitted.
+        return ProcessingResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="path_occupied",
+            blocked_path=blocked_path,
+        )
     resolve_inbox_entry(request.entry_path)
     event = _emit(
         event_type=f"{spec.display_name} Created",

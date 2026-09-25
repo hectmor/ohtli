@@ -20,6 +20,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from ohtli.cli import refusal_message
 from ohtli.execution.execution import Actor, ExecutionRequest, execute_capture
 from ohtli.vault_io import paths
 
@@ -55,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         events_dir=args.vault / paths.EVENTS_DIR.name,
     )
     if not result.applicable:
-        print(f"Not applicable: a Project titled '{args.title}' already exists.")
+        print(refusal_message(result, args.title, "Project"))
         return 1
     print(f"Captured Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
     return 0
