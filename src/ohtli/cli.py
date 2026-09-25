@@ -33,6 +33,49 @@ from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.processing import derived_relationship_for_pair, relationship_for_pair
 
 
+def refusal_message(result, title: str, label: str) -> str:
+    """Why a create was refused, for a person reading a terminal.
+
+    `title exists` keeps the wording every create-* always had. The other
+    reasons say what is in the way of the file the title would be written to.
+    Shared by the CLI and the deterministic trigger script, so both explain a
+    refusal the same way.
+    """
+    article = "an" if label[0] in "AEIOU" else "a"
+    if result.reason == "title_exists":
+        return f"Not applicable: {article} {label} titled '{title}' already exists."
+    return f"Not applicable: {article} {label} titled '{title}' cannot be created: {_blocked_detail(result, label)}"
+
+
+def _blocked_detail(result, label: str) -> str:
+    path = result.blocked_path
+    if result.reason == "same_file_name":
+        return f"{path} already holds {label} '{result.occupant_title}' (same file name). Choose a different title."
+    if result.reason == "reserved_name":
+        return f"the file name '{path.name}' is reserved. Choose a different title."
+    return (
+        f"{path} already exists and is not an Ohtli note; it was left untouched. "
+        f"Move or rename it, or choose a different title."
+    )
+
+
+def _inbox_reason(result, label: str) -> str:
+    """The sentence that follows "left untouched in Inbox." when a Create was
+    refused because its file is taken; nothing for a refusal without a reason
+    (a blank entry), which keeps its original message."""
+    path = result.blocked_path
+    if result.reason == "same_file_name":
+        return f" {path} already holds {label} '{result.occupant_title}' (same file name); choose a different title."
+    if result.reason == "reserved_name":
+        return f" The file name '{path.name}' is reserved; choose a different title."
+    if result.reason == "path_occupied":
+        return (
+            f" {path} already exists and is not an Ohtli note; it was left untouched. "
+            f"Move or rename it, or choose a different title."
+        )
+    return ""
+
+
 def main(argv: list[str] | None = None) -> int:
     spec_by_kind = {
         "project": PROJECT,
@@ -258,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request)
         if not result.applicable:
-            print(f"Not applicable: a Project titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Project"))
             return 1
         print(f"Captured Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -267,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=AREA)
         if not result.applicable:
-            print(f"Not applicable: an Area titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Area"))
             return 1
         print(f"Captured Area '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -276,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=RESOURCE)
         if not result.applicable:
-            print(f"Not applicable: a Resource titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Resource"))
             return 1
         print(f"Captured Resource '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -285,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=REFERENCE)
         if not result.applicable:
-            print(f"Not applicable: a Reference titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Reference"))
             return 1
         print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -423,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=JOURNAL_ENTRY)
         if not result.applicable:
-            print(f"Not applicable: a Journal Entry titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Journal Entry"))
             return 1
         print(f"Captured Journal Entry '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -432,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         request = ExecutionRequest(title=args.title, actor=actor)
         result = execute_capture(request, spec=MEETING)
         if not result.applicable:
-            print(f"Not applicable: a Meeting titled '{args.title}' already exists.")
+            print(refusal_message(result, args.title, "Meeting"))
             return 1
         print(f"Captured Meeting '{result.project.title}' (id={result.project.id}) -> {result.path}")
         return 0
@@ -465,11 +508,11 @@ def main(argv: list[str] | None = None) -> int:
         for entry_path in entries:
             request = ProcessingRequest(entry_path=entry_path, actor=actor)
             result = execute_processing(request, spec=spec_by_kind[args.kind])
+            label = args.kind.replace("-", " ").title()
             if not result.applicable:
                 refused += 1
-                print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.")
+                print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.{_inbox_reason(result, label)}")
                 continue
-            label = args.kind.replace("-", " ").title()
             if result.operation == "update":
                 # No new text to add (blank remainder) still resolves the
                 # entry, but writes and emits nothing: say so honestly

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -21,10 +22,57 @@ def _render_note(representation: dict[str, Any]) -> str:
 def _write_note(
     representation: dict[str, Any], path_fn: Any, *, base_dir: Path | None = None
 ) -> Path:
+    """Create a note at the path its title maps to. Never overwrites.
+
+    Mode "x" makes the operating system refuse (`FileExistsError`) when
+    anything already holds the path: a file, a directory or any symlink,
+    dangling ones included. That closes the gap between checking the path
+    (`inspect_target`) and writing to it. Rewriting a note that already
+    exists is `rewrite_note`, a different operation.
+    """
     path = path_fn(representation["title"], base_dir=base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_render_note(representation), encoding="utf-8")
+    with path.open("x", encoding="utf-8") as note:
+        note.write(_render_note(representation))
     return path
+
+
+def inspect_target(path: Path) -> dict[str, str] | None:
+    """What already holds `path`, without ever raising or following a symlink.
+
+    `None` when nothing does (a dangling symlink does count as something).
+    `{"kind": "note", "title", "id"}` for an Ohtli note: frontmatter with an
+    `id` and a `note_type`, whose title is the first `# ` heading, as
+    `read_note` reads it. `{"kind": "other"}` for everything else: a
+    hand-made note, a file with other frontmatter, a directory, a symlink,
+    empty or non-UTF-8 content.
+    """
+    if not os.path.lexists(path):
+        return None
+    other = {"kind": "other"}
+    if path.is_symlink() or not path.is_file():
+        return other
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return other
+    if not text.startswith("---\n"):
+        return other
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return other
+    try:
+        properties = yaml.safe_load(parts[1])
+    except yaml.YAMLError:
+        return other
+    if not isinstance(properties, dict):
+        return other
+    note_id, note_type = properties.get("id"), properties.get("note_type")
+    if not isinstance(note_id, str) or not isinstance(note_type, str):
+        return other
+    title_match = _TITLE_RE.search(parts[2])
+    title = title_match.group(1).strip() if title_match else path.stem
+    return {"kind": "note", "title": title, "id": note_id}
 
 
 def write_project(representation: dict[str, Any], *, base_dir: Path | None = None) -> Path:
@@ -95,14 +143,22 @@ def _list_existing_titles(directory: Path) -> set[str]:
     Some vault directories already contain non-Domain-Object navigation
     notes (`README.md`, `index.md`) that carry no YAML frontmatter. A
     file without frontmatter is not a Domain Object representation and
-    is skipped rather than treated as an error.
+    is skipped rather than treated as an error. So is anything that is
+    not a readable note: a directory or dangling symlink named `x.md`, or
+    a file that is not UTF-8. One such entry must not break every Capture
+    in the folder.
     """
     if not directory.exists():
         return set()
 
     titles = set()
     for md_file in directory.glob("*.md"):
-        if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+        if not md_file.is_file():
+            continue
+        try:
+            if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+                continue
+        except (UnicodeDecodeError, OSError):
             continue
         titles.add(read_note(md_file)["title"])
     return titles

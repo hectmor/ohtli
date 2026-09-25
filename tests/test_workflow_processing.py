@@ -1,3 +1,5 @@
+import pytest
+
 from ohtli.domain.area import Area
 from ohtli.workflow import processing
 
@@ -14,6 +16,21 @@ def test_processing_is_still_applicable_when_the_derived_title_already_exists():
 
 def test_processing_is_not_applicable_when_entry_has_no_content():
     assert not processing.is_applicable("\n   \n")
+
+
+def test_a_create_is_applicable_when_the_target_path_is_free():
+    assert processing.is_create_applicable(target_occupied=False)
+
+
+def test_a_create_is_not_applicable_when_the_target_path_is_occupied():
+    """Only Create needs a free path: Update rewrites the note that already
+    holds it, so it never asks this."""
+    assert not processing.is_create_applicable(target_occupied=True)
+
+
+def test_target_occupied_is_required_for_a_create():
+    with pytest.raises(TypeError):
+        processing.is_create_applicable()
 
 
 def test_processing_strips_markdown_heading_marks_from_derived_title():
