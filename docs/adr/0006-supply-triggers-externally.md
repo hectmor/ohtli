@@ -43,7 +43,7 @@ Every automated entry point must declare which Actor it is and must target an ex
 
 * Ohtli keeps no Automation history: the invoker owns scheduling, retries and deduplication.
 * Attribution depends on the invoker declaring its Actor honestly.
-* The CLI needs a way to declare a non-human Actor; it currently records every command as `human`. This is left to a follow-up (Phase 37c).
+* The CLI needs a way to declare a non-human Actor. It has one since Phase 37c (#153): `ohtli --actor <actor> <command>`, placed before the command, defaulting to `human`. It is attribution only, as decided above.
 
 ## Related Decisions
 
