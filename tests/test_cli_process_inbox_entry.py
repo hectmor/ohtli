@@ -204,6 +204,61 @@ def test_a_named_entry_that_processing_refuses_stays_and_the_others_are_processe
     assert _notes(tmp_path) == ["one.md"]
 
 
+def test_two_notes_with_the_same_title_refuse_as_ambiguous_and_name_both(capsys, tmp_path):
+    (tmp_path / "projects").mkdir()
+    a = tmp_path / "projects" / "a.md"
+    b = tmp_path / "projects" / "b.md"
+    a.write_text("---\nid: aaa\nnote_type: project\n---\n\n# One\n\nfirst\n", encoding="utf-8")
+    b.write_text("---\nid: bbb\nnote_type: project\n---\n\n# One\n\nsecond\n", encoding="utf-8")
+    before = {a: a.read_bytes(), b: b.read_bytes()}
+    _write(tmp_path, "one-update.md", "One\n\nnew notes\n")
+
+    code, out = _run(capsys, "process-inbox", "--entry", "one-update")
+
+    assert code == 1
+    assert out == (
+        "Not applicable: 'one-update.md' left untouched in Inbox. 2 Project notes are titled 'One' "
+        "(a.md, b.md); rename all but one, then process again.\n"
+    )
+    assert a.read_bytes() == before[a] and b.read_bytes() == before[b]
+    assert (tmp_path / "inbox" / "one-update.md").exists()
+
+
+def test_a_title_held_only_by_a_non_ohtli_file_is_refused_and_named(capsys, tmp_path):
+    (tmp_path / "projects").mkdir()
+    path = tmp_path / "projects" / "hand-made.md"
+    path.write_text("---\ntags: []\n---\n\n# One\n\nmine\n", encoding="utf-8")
+    before = path.read_bytes()
+    _write(tmp_path, "one-update.md", "One\n\nnew notes\n")
+
+    code, out = _run(capsys, "process-inbox", "--entry", "one-update")
+
+    assert code == 1
+    assert out == (
+        f"Not applicable: 'one-update.md' left untouched in Inbox. {path} is titled 'One' but is "
+        f"not an Ohtli Project note; it was left untouched.\n"
+    )
+    assert path.read_bytes() == before
+
+
+def test_an_ambiguous_title_in_batch_mode_is_reported_kept_and_others_still_processed(capsys, tmp_path):
+    (tmp_path / "projects").mkdir()
+    a = tmp_path / "projects" / "a.md"
+    b = tmp_path / "projects" / "b.md"
+    a.write_text("---\nid: aaa\nnote_type: project\n---\n\n# One\n\nfirst\n", encoding="utf-8")
+    b.write_text("---\nid: bbb\nnote_type: project\n---\n\n# One\n\nsecond\n", encoding="utf-8")
+    _write(tmp_path, "one-update.md", "One\n\nnew notes\n")
+    _write(tmp_path, "fresh.md", "Fresh\n\nbrand new\n")
+
+    code, out = _run(capsys, "process-inbox")
+
+    assert code == 0, "batch mode keeps exiting 0 when it refuses entries"
+    assert "2 Project notes are titled 'One'" in out
+    assert "Processed Project 'Fresh'" in out
+    assert (tmp_path / "inbox" / "one-update.md").exists()
+    assert not (tmp_path / "inbox" / "fresh.md").exists()
+
+
 def test_a_duplicate_title_updates_the_existing_note_via_named_processing(capsys, tmp_path):
     """Was `test_a_duplicate_title_is_refused_and_the_entry_stays`: a title
     collision updates instead of being refused (Phase 34)."""

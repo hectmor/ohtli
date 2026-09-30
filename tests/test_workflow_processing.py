@@ -33,6 +33,26 @@ def test_target_occupied_is_required_for_a_create():
         processing.is_create_applicable()
 
 
+def test_an_update_is_applicable_when_exactly_one_note_carries_the_title():
+    assert processing.is_update_applicable(matches=1)
+
+
+def test_an_update_is_not_applicable_when_no_note_carries_the_title():
+    """The title exists only in name: a hand-made file, or a note of a
+    different type. Nothing of the right kind can be rewritten."""
+    assert not processing.is_update_applicable(matches=0)
+
+
+def test_an_update_is_not_applicable_when_more_than_one_note_carries_the_title():
+    """Ambiguous: Update must not guess which one to rewrite."""
+    assert not processing.is_update_applicable(matches=2)
+
+
+def test_matches_is_required_for_an_update():
+    with pytest.raises(TypeError):
+        processing.is_update_applicable()
+
+
 def test_processing_strips_markdown_heading_marks_from_derived_title():
     assert processing.is_applicable("# Website Relaunch\n\nNotes.")
 

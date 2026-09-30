@@ -263,6 +263,22 @@ def is_update(raw_text: str, existing_titles: set[str]) -> bool:
     return title is not None and title in existing_titles
 
 
+def is_update_applicable(*, matches: int) -> bool:
+    """An Update is applicable only when exactly one note carries the title.
+
+    Meaningful once `is_update` holds. `existing_titles` (as `is_update`
+    uses it) only asks whether SOME file in the folder carries this title;
+    it says nothing about which one, or whether more than one does. Zero
+    matches means the title exists only in name — a hand-made file, or a
+    note of a different type — nothing of the right kind to rewrite. More
+    than one is ambiguous: Update must not guess which to rewrite.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1
+
+
 def transform(raw_text: str, domain_factory: Callable[..., T] = Project) -> T:
     """The Processing transformation: interpret an existing Inbox entry
     as a new Domain Object.

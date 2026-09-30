@@ -22,7 +22,9 @@ from ohtli.vault_io.events import append_event, read_events
 from ohtli.vault_io.generated import write_generated_file
 from ohtli.vault_io.markdown import (
     inspect_target,
+    find_any_note_titled,
     find_note_by_id,
+    find_notes_titled,
     list_projects_linking_to,
     read_inbox_entry,
     resolve_inbox_entry,
@@ -223,6 +225,12 @@ class ProcessingResult:
     reason: str | None = None
     blocked_path: Path | None = None
     occupant_title: str | None = None
+    # Only set when an Update is refused as `reason="ambiguous_title"`: every
+    # note that carries the title.
+    candidates: tuple[Path, ...] = ()
+    # The title Update was looking for, set whenever `reason` is
+    # `ambiguous_title` or `not_an_ohtli_note`, for the CLI's message.
+    search_title: str | None = None
 
 
 def execute_processing(
@@ -256,7 +264,48 @@ def execute_processing(
 
     if processing.is_update(raw_text, existing_titles):
         title = processing.derive_title(raw_text)
-        path = spec.file_path(title, base_dir=base_dir)
+        # Located by TITLE, not by the slug the title happens to map to: a
+        # note renamed since it was captured is still found here, and a
+        # DIFFERENT note already sitting at that slug is never mistaken for
+        # it (`find_notes_titled` never matches a symlink either, even one
+        # that resolves to a real note of this title).
+        directory = spec.file_path(title, base_dir=base_dir).parent
+        matches = find_notes_titled(directory, title, spec.note_type)
+        if not processing.is_update_applicable(matches=len(matches)):
+            ambiguous = len(matches) > 1
+            return ProcessingResult(
+                request=request,
+                applicable=False,
+                project=None,
+                path=None,
+                event=None,
+                reason="ambiguous_title" if ambiguous else "not_an_ohtli_note",
+                blocked_path=None if ambiguous else find_any_note_titled(directory, title),
+                candidates=tuple(matches) if ambiguous else (),
+                search_title=title,
+            )
+        path = matches[0]
+        # Revalidated right before the write: closes the gap between locating
+        # the note above and rewriting it below, the same way Capture's
+        # exclusive create closes the gap between checking a path and
+        # writing to it.
+        occupant = inspect_target(path)
+        if (
+            occupant is None
+            or occupant["kind"] != "note"
+            or occupant["note_type"] != spec.note_type
+            or occupant["title"] != title
+        ):
+            return ProcessingResult(
+                request=request,
+                applicable=False,
+                project=None,
+                path=None,
+                event=None,
+                reason="not_an_ohtli_note",
+                blocked_path=path,
+                search_title=title,
+            )
         representation = spec.read(path)
         entry_text = processing.derive_notes(raw_text)
 

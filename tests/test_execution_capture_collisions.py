@@ -361,7 +361,12 @@ def test_an_ohtli_note_inspects_as_a_note_with_its_title_and_id(tmp_path):
     path = tmp_path / "x.md"
     path.write_text("---\nid: abc-123\nnote_type: project\n---\n\n# Some Title\n\nbody\n", encoding="utf-8")
 
-    assert inspect_target(path) == {"kind": "note", "title": "Some Title", "id": "abc-123"}
+    assert inspect_target(path) == {
+        "kind": "note",
+        "title": "Some Title",
+        "id": "abc-123",
+        "note_type": "project",
+    }
 
 
 @pytest.mark.parametrize(

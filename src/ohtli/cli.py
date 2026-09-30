@@ -60,9 +60,14 @@ def _blocked_detail(result, label: str) -> str:
 
 
 def _inbox_reason(result, label: str) -> str:
-    """The sentence that follows "left untouched in Inbox." when a Create was
-    refused because its file is taken; nothing for a refusal without a reason
-    (a blank entry), which keeps its original message."""
+    """The sentence that follows "left untouched in Inbox." when a Create or
+    an Update was refused; nothing for a refusal without a reason (a blank
+    entry), which keeps its original message.
+
+    `same_file_name`, `reserved_name` and `path_occupied` are Create refusing
+    to overwrite. `ambiguous_title` and `not_an_ohtli_note` are Update unable
+    to tell which note, if any, to rewrite: `existing_titles` only asks
+    whether some file in the folder carries the title, never which one."""
     path = result.blocked_path
     if result.reason == "same_file_name":
         return f" {path} already holds {label} '{result.occupant_title}' (same file name); choose a different title."
@@ -73,6 +78,16 @@ def _inbox_reason(result, label: str) -> str:
             f" {path} already exists and is not an Ohtli note; it was left untouched. "
             f"Move or rename it, or choose a different title."
         )
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then process again."
+        )
+    if result.reason == "not_an_ohtli_note" and path is not None:
+        return f" {path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    if result.reason == "not_an_ohtli_note":
+        return f" No {label} note titled '{result.search_title}' could be found to update."
     return ""
 
 
