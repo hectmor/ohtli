@@ -88,6 +88,8 @@ def _inbox_reason(result, label: str) -> str:
         return f" {path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
     if result.reason == "not_an_ohtli_note":
         return f" No {label} note titled '{result.search_title}' could be found to update."
+    if result.reason == "unreadable_entry":
+        return f" {path} is not a readable UTF-8 text file; convert or remove it."
     return ""
 
 
