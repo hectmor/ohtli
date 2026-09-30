@@ -22,7 +22,10 @@ CASES = [
 
 def _capture(tmp_path, spec, title="Existing"):
     return execute_capture(
-        ExecutionRequest(title=title, actor=Actor.HUMAN), spec=spec, base_dir=tmp_path / spec.note_type
+        ExecutionRequest(title=title, actor=Actor.HUMAN),
+        spec=spec,
+        base_dir=tmp_path / spec.note_type,
+        events_dir=tmp_path / "events",
     )
 
 
@@ -34,7 +37,10 @@ def _entry(tmp_path, text, name="entry.md"):
 
 def _process(tmp_path, spec, entry, actor=Actor.HUMAN):
     return execute_processing(
-        ProcessingRequest(entry_path=entry, actor=actor), spec=spec, base_dir=tmp_path / spec.note_type
+        ProcessingRequest(entry_path=entry, actor=actor),
+        spec=spec,
+        base_dir=tmp_path / spec.note_type,
+        events_dir=tmp_path / "events",
     )
 
 

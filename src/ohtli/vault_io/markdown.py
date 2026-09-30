@@ -41,11 +41,14 @@ def inspect_target(path: Path) -> dict[str, str] | None:
     """What already holds `path`, without ever raising or following a symlink.
 
     `None` when nothing does (a dangling symlink does count as something).
-    `{"kind": "note", "title", "id"}` for an Ohtli note: frontmatter with an
-    `id` and a `note_type`, whose title is the first `# ` heading, as
-    `read_note` reads it. `{"kind": "other"}` for everything else: a
-    hand-made note, a file with other frontmatter, a directory, a symlink,
-    empty or non-UTF-8 content.
+    `{"kind": "note", "title", "id", "note_type"}` for an Ohtli note:
+    frontmatter with an `id` and a `note_type`, whose title is the first `# `
+    heading, as `read_note` reads it. `{"kind": "other"}` for everything
+    else: a hand-made note, a file with other frontmatter, a directory, a
+    symlink, empty or non-UTF-8 content.
+
+    A symlink is always "other", even one that resolves to a real note:
+    writing through it could reach a file outside the vault.
     """
     if not os.path.lexists(path):
         return None
@@ -72,7 +75,7 @@ def inspect_target(path: Path) -> dict[str, str] | None:
         return other
     title_match = _TITLE_RE.search(parts[2])
     title = title_match.group(1).strip() if title_match else path.stem
-    return {"kind": "note", "title": title, "id": note_id}
+    return {"kind": "note", "title": title, "id": note_id, "note_type": note_type}
 
 
 def write_project(representation: dict[str, Any], *, base_dir: Path | None = None) -> Path:
@@ -162,6 +165,61 @@ def _list_existing_titles(directory: Path) -> set[str]:
             continue
         titles.add(read_note(md_file)["title"])
     return titles
+
+
+def find_notes_titled(directory: Path, title: str, note_type: str) -> list[Path]:
+    """Every Ohtli note of `note_type` in `directory` whose title is exactly
+    `title`, located by what each file IS, not by the file name its title
+    happens to slugify to.
+
+    Processing's Update used to locate the note to rewrite at
+    `spec.file_path(title)` — the slug path — even though Update is chosen by
+    title. A note renamed since it was captured no longer lives there, and a
+    DIFFERENT note can already sit there under the same slug (two titles, one
+    file name): the wrong note got rewritten. This finds it by title instead,
+    so a rename does not lose it.
+
+    Built on `inspect_target`: never raises, and a symlink is never a match
+    even when it resolves to a matching note (writing through it could reach
+    a file outside the vault).
+    """
+    if not directory.exists():
+        return []
+    matches = []
+    for md_file in sorted(directory.glob("*.md")):
+        occupant = inspect_target(md_file)
+        if (
+            occupant is not None
+            and occupant["kind"] == "note"
+            and occupant["note_type"] == note_type
+            and occupant["title"] == title
+        ):
+            matches.append(md_file)
+    return matches
+
+
+def find_any_note_titled(directory: Path, title: str) -> Path | None:
+    """The first readable, frontmattered file in `directory` whose title is
+    `title`, regardless of its `note_type` or whether it carries an `id` at
+    all. Used only to name the file in a refusal message when
+    `find_notes_titled` finds nothing of the right type: the same loose
+    criterion `_list_existing_titles` uses, so it agrees with `is_update`'s
+    "this title exists" on which file is responsible.
+    """
+    if not directory.exists():
+        return None
+    for md_file in sorted(directory.glob("*.md")):
+        if not md_file.is_file():
+            continue
+        try:
+            text = md_file.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if not text.startswith("---\n"):
+            continue
+        if read_note(md_file)["title"] == title:
+            return md_file
+    return None
 
 
 def list_existing_titles(*, base_dir: Path | None = None) -> set[str]:
