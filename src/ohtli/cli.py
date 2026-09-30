@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
+from pathlib import Path
 
 from ohtli.execution.execution import (
     Actor,
@@ -28,6 +30,7 @@ from ohtli.execution.execution import (
     write_area_dashboard,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE, display_name_of
+from ohtli.vault_io import paths
 from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries
 from ohtli.workflow.evaluation import OperationalResult
 from ohtli.workflow.processing import derived_relationship_for_pair, relationship_for_pair
@@ -108,10 +111,14 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="ohtli",
-        epilog="Global options such as --actor go before the command: ohtli --actor deterministic create-project X",
+        epilog=(
+            "Global options such as --actor and --vault go before the command: "
+            "ohtli --actor deterministic --vault /path/to/vault create-project X"
+        ),
     )
-    # Declared only here, never on a subparser: a subparser default would silently
-    # overwrite a value parsed before the command, recording `human` without an error.
+    # Both declared only here, never on a subparser: a subparser default would
+    # silently overwrite a value parsed before the command (--actor recording
+    # `human`, --vault the real vault), with no error either way.
     parser.add_argument(
         "--actor",
         choices=[a.value for a in Actor],
@@ -120,6 +127,18 @@ def main(argv: list[str] | None = None) -> int:
             "Who is invoking this command (default: human). Recorded as the actor of every "
             "Event it emits, for attribution only: it is not authentication or authorization "
             "and grants no permission. Commands that emit no Event ignore it"
+        ),
+    )
+    parser.add_argument(
+        "--vault",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "Vault root directory to use instead of the real vault (default: the real vault, "
+            "today's behavior unchanged). DIR must already exist; its subfolders "
+            "(projects/, journal/entries/, .ohtli/, ...) are created on demand, as in the real "
+            "vault"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -314,319 +333,324 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     actor = Actor(args.actor)
 
-    if args.command == "create-project":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Project"))
-            return 1
-        print(f"Captured Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
+    if args.vault is not None and not args.vault.is_dir():
+        parser.error(f"--vault {args.vault} is not an existing directory")
 
-    if args.command == "create-area":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request, spec=AREA)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Area"))
-            return 1
-        print(f"Captured Area '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
-
-    if args.command == "create-resource":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request, spec=RESOURCE)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Resource"))
-            return 1
-        print(f"Captured Resource '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
-
-    if args.command == "create-reference":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request, spec=REFERENCE)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Reference"))
-            return 1
-        print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
-
-    if args.command == "contains":
-        result = read_contained_projects(args.area)
-        if not result.applicable:
-            print(f"Not applicable: no Area titled '{args.area}'.")
-            return 1
-        if not result.projects:
-            print(f"Area '{args.area}' contains no Projects.")
+    vault = paths.vault_root(args.vault) if args.vault is not None else contextlib.nullcontext()
+    with vault:
+        if args.command == "create-project":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Project"))
+                return 1
+            print(f"Captured Project '{result.project.title}' (id={result.project.id}) -> {result.path}")
             return 0
-        print(f"Area '{args.area}' contains {len(result.projects)} Project(s):")
-        for project in result.projects:
-            historical = " [historical]" if project["context"] == "historical" else ""
-            print(f"  {project['title']}{historical} (status={project['status']}, id={project['id']})")
-        return 0
 
-    if args.command == "area-dashboard":
-        if not args.write:
-            dashboard = read_area_dashboard(args.area)
-            if not dashboard.applicable:
+        if args.command == "create-area":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request, spec=AREA)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Area"))
+                return 1
+            print(f"Captured Area '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            return 0
+
+        if args.command == "create-resource":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request, spec=RESOURCE)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Resource"))
+                return 1
+            print(f"Captured Resource '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            return 0
+
+        if args.command == "create-reference":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request, spec=REFERENCE)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Reference"))
+                return 1
+            print(f"Captured Reference '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            return 0
+
+        if args.command == "contains":
+            result = read_contained_projects(args.area)
+            if not result.applicable:
                 print(f"Not applicable: no Area titled '{args.area}'.")
                 return 1
-            print(dashboard.markdown, end="")
+            if not result.projects:
+                print(f"Area '{args.area}' contains no Projects.")
+                return 0
+            print(f"Area '{args.area}' contains {len(result.projects)} Project(s):")
+            for project in result.projects:
+                historical = " [historical]" if project["context"] == "historical" else ""
+                print(f"  {project['title']}{historical} (status={project['status']}, id={project['id']})")
             return 0
 
-        written = write_area_dashboard(args.area)
-        if not written.applicable:
-            print(f"Not applicable: no Area titled '{args.area}'.")
-            return 1
-        if written.outcome == "refused":
-            print(
-                f"Not written: {written.path} already exists and was not generated by ohtli; "
-                f"it was left untouched. Move or rename it, then re-run."
-            )
-            return 1
-        if written.outcome == "unchanged":
-            print(f"Area Dashboard for '{written.area_title}' is already up to date -> {written.path}")
-        else:
-            verb = "Wrote" if written.outcome == "created" else "Updated"
-            print(f"{verb} Area Dashboard for '{written.area_title}' -> {written.path}")
-        return 0
-
-    if args.command in ("link", "unlink"):
-        source_spec = spec_by_kind[args.from_type]
-        target_spec = spec_by_kind[args.to_type]
-        source_type = source_spec.domain_type.__name__
-        target_type = target_spec.domain_type.__name__
-        derived = derived_relationship_for_pair(source_type, target_type)
-        if derived is not None:
-            via = derived.via
-            via_source_kind = kind_of_type[via.source_type]
-            via_target_kind = kind_of_type[via.target_type]
-            print(
-                f"'{display_name_of(source_type)} {derived.relationship_type} {display_name_of(target_type)}' "
-                f"is derived from '{display_name_of(via.source_type)} {via.relationship_type} "
-                f"{display_name_of(via.target_type)}' and is never established directly. "
-                f"Use: ohtli {args.command} --from-type {via_source_kind} --from <{via_source_kind}> "
-                f"--to-type {via_target_kind} --to <{via_target_kind}>; read it with: ohtli contains <area>."
-            )
-            return 1
-        definition = relationship_for_pair(source_type, target_type)
-        if definition is None:
-            print(
-                f"No canonical relationship is implemented from '{args.from_type}' "
-                f"to '{args.to_type}'."
-            )
-            return 1
-
-        if args.command == "link":
-            result = execute_relate(
-                RelateRequest(
-                    source_title=args.from_title,
-                    target_title=args.to_title,
-                    actor=actor,
-                    relationship_type=definition.relationship_type,
-                ),
-                source_spec=source_spec,
-                target_spec=target_spec,
-            )
-            if not result.applicable:
-                print(
-                    f"Not applicable: cannot link {args.from_type} '{args.from_title}' "
-                    f"to {args.to_type} '{args.to_title}' (both must exist, it must not "
-                    "already be linked, and the cardinality must allow it)."
-                )
-                return 1
-            print(f"{result.event.event_type}: '{args.from_title}' {definition.relationship_type} '{args.to_title}'")
-            return 0
-
-        result = execute_unrelate(
-            UnrelateRequest(
-                source_title=args.from_title,
-                actor=actor,
-                relationship_type=definition.relationship_type,
-                target_title=args.to_title,
-            ),
-            spec=source_spec,
-            target_spec=target_spec if args.to_title is not None else None,
-        )
-        if not result.applicable:
-            print(
-                f"Not applicable: cannot unlink {args.from_type} '{args.from_title}'. "
-                "It must exist and be linked; a 0..* relationship also needs --to."
-            )
-            return 1
-        print(f"{result.event.event_type}: '{args.from_title}'")
-        return 0
-
-    if args.command == "link-project-to-area":
-        request = RelateRequest(
-            source_title=args.project, target_title=args.area, actor=actor
-        )
-        result = execute_relate(request)
-        if not result.applicable:
-            print(
-                f"Not applicable: cannot link Project '{args.project}' to Area '{args.area}' "
-                "(both must exist, and a Project belongs to at most one Area)."
-            )
-            return 1
-        print(f"{result.event.event_type}: '{args.project}' belongs to '{args.area}'")
-        return 0
-
-    if args.command == "unlink-project-from-area":
-        request = UnrelateRequest(source_title=args.project, actor=actor)
-        result = execute_unrelate(request)
-        if not result.applicable:
-            print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.")
-            return 1
-        print(f"{result.event.event_type}: '{args.project}'")
-        return 0
-
-    if args.command == "create-journal-entry":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request, spec=JOURNAL_ENTRY)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Journal Entry"))
-            return 1
-        print(f"Captured Journal Entry '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
-
-    if args.command == "create-meeting":
-        request = ExecutionRequest(title=args.title, actor=actor)
-        result = execute_capture(request, spec=MEETING)
-        if not result.applicable:
-            print(refusal_message(result, args.title, "Meeting"))
-            return 1
-        print(f"Captured Meeting '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        return 0
-
-    if args.command == "process-inbox":
-        named = args.entry is not None
-        if named:
-            # Resolve every name before processing anything: an unknown name
-            # must not leave a half-done run, because processing deletes the entry.
-            entries = []
-            unresolved = []
-            for name in args.entry:
-                found = find_inbox_entry(name)
-                if found is None:
-                    unresolved.append(name)
-                elif found not in entries:
-                    entries.append(found)
-            if unresolved:
-                for name in unresolved:
-                    print(f"Not applicable: no Inbox entry named '{name}'.")
-                print("Nothing was processed.")
-                return 1
-        else:
-            entries = list_inbox_entries()
-            if not entries:
-                print("Inbox is empty.")
+        if args.command == "area-dashboard":
+            if not args.write:
+                dashboard = read_area_dashboard(args.area)
+                if not dashboard.applicable:
+                    print(f"Not applicable: no Area titled '{args.area}'.")
+                    return 1
+                print(dashboard.markdown, end="")
                 return 0
 
-        refused = 0
-        for entry_path in entries:
-            request = ProcessingRequest(entry_path=entry_path, actor=actor)
-            result = execute_processing(request, spec=spec_by_kind[args.kind])
-            label = args.kind.replace("-", " ").title()
-            if not result.applicable:
-                refused += 1
-                print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.{_inbox_reason(result, label)}")
-                continue
-            if result.operation == "update":
-                # No new text to add (blank remainder) still resolves the
-                # entry, but writes and emits nothing: say so honestly
-                # instead of claiming an update that did not happen.
-                verb = "Updated" if result.event is not None else "Resolved"
-            else:
-                verb = "Processed"
-            print(f"{verb} {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
-        # Batch mode keeps exiting 0 when it refuses entries; an entry the user
-        # asked for by name that could not be processed is a failure.
-        return 1 if (named and refused) else 0
-
-    if args.command in (
-        "archive-project",
-        "archive-area",
-        "archive-resource",
-        "archive-reference",
-        "archive-meeting",
-        "archive-journal-entry",
-        "reactivate-project",
-        "reactivate-area",
-        "reactivate-resource",
-        "reactivate-reference",
-        "reactivate-meeting",
-        "reactivate-journal-entry",
-    ):
-        operation, _, kind = args.command.partition("-")
-        spec = spec_by_kind[kind]
-        execute = execute_archive if operation == "archive" else execute_reactivate
-
-        request = ArchiveRequest(title=args.title, actor=actor)
-        result = execute(request, spec=spec)
-        if not result.applicable:
-            if result.reason == "operational_dependents":
-                dependents = read_operational_dependents(args.title, spec)
-                names = ", ".join(f"'{d['title']}'" for d in dependents)
+            written = write_area_dashboard(args.area)
+            if not written.applicable:
+                print(f"Not applicable: no Area titled '{args.area}'.")
+                return 1
+            if written.outcome == "refused":
                 print(
-                    f"Not applicable: '{args.title}' cannot be archived. It is still required "
-                    f"operationally by {names}. Archive does not resolve this: unlink it, or "
-                    f"archive the object(s) requiring it, first."
+                    f"Not written: {written.path} already exists and was not generated by ohtli; "
+                    f"it was left untouched. Move or rename it, then re-run."
                 )
+                return 1
+            if written.outcome == "unchanged":
+                print(f"Area Dashboard for '{written.area_title}' is already up to date -> {written.path}")
             else:
-                print(f"Not applicable: '{args.title}' cannot be {operation}d.")
-            return 1
-        print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
-        return 0
+                verb = "Wrote" if written.outcome == "created" else "Updated"
+                print(f"{verb} Area Dashboard for '{written.area_title}' -> {written.path}")
+            return 0
 
-    if args.command in ("evaluate-project", "evaluate-area"):
-        spec = PROJECT if args.command == "evaluate-project" else AREA
-        request = EvaluationRequest(
-            title=args.title, result=OperationalResult(args.result), actor=actor
-        )
-        result = execute_evaluation(request, spec=spec)
-        if not result.applicable:
-            print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.")
-            return 1
-        print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
-        return 0
+        if args.command in ("link", "unlink"):
+            source_spec = spec_by_kind[args.from_type]
+            target_spec = spec_by_kind[args.to_type]
+            source_type = source_spec.domain_type.__name__
+            target_type = target_spec.domain_type.__name__
+            derived = derived_relationship_for_pair(source_type, target_type)
+            if derived is not None:
+                via = derived.via
+                via_source_kind = kind_of_type[via.source_type]
+                via_target_kind = kind_of_type[via.target_type]
+                print(
+                    f"'{display_name_of(source_type)} {derived.relationship_type} {display_name_of(target_type)}' "
+                    f"is derived from '{display_name_of(via.source_type)} {via.relationship_type} "
+                    f"{display_name_of(via.target_type)}' and is never established directly. "
+                    f"Use: ohtli {args.command} --from-type {via_source_kind} --from <{via_source_kind}> "
+                    f"--to-type {via_target_kind} --to <{via_target_kind}>; read it with: ohtli contains <area>."
+                )
+                return 1
+            definition = relationship_for_pair(source_type, target_type)
+            if definition is None:
+                print(
+                    f"No canonical relationship is implemented from '{args.from_type}' "
+                    f"to '{args.to_type}'."
+                )
+                return 1
 
-    if args.command in (
-        "review-project",
-        "review-area",
-        "review-resource",
-        "review-reference",
-        "review-meeting",
-    ):
-        _, _, kind = args.command.partition("-")
-        spec = spec_by_kind[kind]
-        request = ReviewRequest(title=args.title, actor=actor, since=args.since)
-        result = execute_review(request, spec=spec)
-        if not result.applicable:
-            print(f"Not applicable: '{args.title}' does not exist.")
-            return 1
-        print(
-            f"Reviewed '{result.project.title}': {result.assessment.conclusion.value} "
-            f"({'; '.join(result.assessment.basis)})"
-        )
-        return 0
+            if args.command == "link":
+                result = execute_relate(
+                    RelateRequest(
+                        source_title=args.from_title,
+                        target_title=args.to_title,
+                        actor=actor,
+                        relationship_type=definition.relationship_type,
+                    ),
+                    source_spec=source_spec,
+                    target_spec=target_spec,
+                )
+                if not result.applicable:
+                    print(
+                        f"Not applicable: cannot link {args.from_type} '{args.from_title}' "
+                        f"to {args.to_type} '{args.to_title}' (both must exist, it must not "
+                        "already be linked, and the cardinality must allow it)."
+                    )
+                    return 1
+                print(f"{result.event.event_type}: '{args.from_title}' {definition.relationship_type} '{args.to_title}'")
+                return 0
 
-    if args.command in ("enrich-project", "enrich-area", "enrich-resource"):
-        _, _, kind = args.command.partition("-")
-        spec = spec_by_kind[kind]
-        request = KnowledgeRequest(
-            title=args.title,
-            understanding_title=args.understanding_title,
-            understanding=args.understanding,
-            provenance=tuple(args.provenance),
-            actor=actor,
-        )
-        result = execute_knowledge(request, spec=spec)
-        if not result.applicable:
-            print(f"Not applicable: '{args.title}' cannot be enriched.")
-            return 1
-        print(f"Enriched '{result.project.title}' -> {result.event.event_type}")
-        return 0
+            result = execute_unrelate(
+                UnrelateRequest(
+                    source_title=args.from_title,
+                    actor=actor,
+                    relationship_type=definition.relationship_type,
+                    target_title=args.to_title,
+                ),
+                spec=source_spec,
+                target_spec=target_spec if args.to_title is not None else None,
+            )
+            if not result.applicable:
+                print(
+                    f"Not applicable: cannot unlink {args.from_type} '{args.from_title}'. "
+                    "It must exist and be linked; a 0..* relationship also needs --to."
+                )
+                return 1
+            print(f"{result.event.event_type}: '{args.from_title}'")
+            return 0
 
-    return 1
+        if args.command == "link-project-to-area":
+            request = RelateRequest(
+                source_title=args.project, target_title=args.area, actor=actor
+            )
+            result = execute_relate(request)
+            if not result.applicable:
+                print(
+                    f"Not applicable: cannot link Project '{args.project}' to Area '{args.area}' "
+                    "(both must exist, and a Project belongs to at most one Area)."
+                )
+                return 1
+            print(f"{result.event.event_type}: '{args.project}' belongs to '{args.area}'")
+            return 0
+
+        if args.command == "unlink-project-from-area":
+            request = UnrelateRequest(source_title=args.project, actor=actor)
+            result = execute_unrelate(request)
+            if not result.applicable:
+                print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.")
+                return 1
+            print(f"{result.event.event_type}: '{args.project}'")
+            return 0
+
+        if args.command == "create-journal-entry":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request, spec=JOURNAL_ENTRY)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Journal Entry"))
+                return 1
+            print(f"Captured Journal Entry '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            return 0
+
+        if args.command == "create-meeting":
+            request = ExecutionRequest(title=args.title, actor=actor)
+            result = execute_capture(request, spec=MEETING)
+            if not result.applicable:
+                print(refusal_message(result, args.title, "Meeting"))
+                return 1
+            print(f"Captured Meeting '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            return 0
+
+        if args.command == "process-inbox":
+            named = args.entry is not None
+            if named:
+                # Resolve every name before processing anything: an unknown name
+                # must not leave a half-done run, because processing deletes the entry.
+                entries = []
+                unresolved = []
+                for name in args.entry:
+                    found = find_inbox_entry(name)
+                    if found is None:
+                        unresolved.append(name)
+                    elif found not in entries:
+                        entries.append(found)
+                if unresolved:
+                    for name in unresolved:
+                        print(f"Not applicable: no Inbox entry named '{name}'.")
+                    print("Nothing was processed.")
+                    return 1
+            else:
+                entries = list_inbox_entries()
+                if not entries:
+                    print("Inbox is empty.")
+                    return 0
+
+            refused = 0
+            for entry_path in entries:
+                request = ProcessingRequest(entry_path=entry_path, actor=actor)
+                result = execute_processing(request, spec=spec_by_kind[args.kind])
+                label = args.kind.replace("-", " ").title()
+                if not result.applicable:
+                    refused += 1
+                    print(f"Not applicable: '{entry_path.name}' left untouched in Inbox.{_inbox_reason(result, label)}")
+                    continue
+                if result.operation == "update":
+                    # No new text to add (blank remainder) still resolves the
+                    # entry, but writes and emits nothing: say so honestly
+                    # instead of claiming an update that did not happen.
+                    verb = "Updated" if result.event is not None else "Resolved"
+                else:
+                    verb = "Processed"
+                print(f"{verb} {label} '{result.project.title}' (id={result.project.id}) -> {result.path}")
+            # Batch mode keeps exiting 0 when it refuses entries; an entry the user
+            # asked for by name that could not be processed is a failure.
+            return 1 if (named and refused) else 0
+
+        if args.command in (
+            "archive-project",
+            "archive-area",
+            "archive-resource",
+            "archive-reference",
+            "archive-meeting",
+            "archive-journal-entry",
+            "reactivate-project",
+            "reactivate-area",
+            "reactivate-resource",
+            "reactivate-reference",
+            "reactivate-meeting",
+            "reactivate-journal-entry",
+        ):
+            operation, _, kind = args.command.partition("-")
+            spec = spec_by_kind[kind]
+            execute = execute_archive if operation == "archive" else execute_reactivate
+
+            request = ArchiveRequest(title=args.title, actor=actor)
+            result = execute(request, spec=spec)
+            if not result.applicable:
+                if result.reason == "operational_dependents":
+                    dependents = read_operational_dependents(args.title, spec)
+                    names = ", ".join(f"'{d['title']}'" for d in dependents)
+                    print(
+                        f"Not applicable: '{args.title}' cannot be archived. It is still required "
+                        f"operationally by {names}. Archive does not resolve this: unlink it, or "
+                        f"archive the object(s) requiring it, first."
+                    )
+                else:
+                    print(f"Not applicable: '{args.title}' cannot be {operation}d.")
+                return 1
+            print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
+            return 0
+
+        if args.command in ("evaluate-project", "evaluate-area"):
+            spec = PROJECT if args.command == "evaluate-project" else AREA
+            request = EvaluationRequest(
+                title=args.title, result=OperationalResult(args.result), actor=actor
+            )
+            result = execute_evaluation(request, spec=spec)
+            if not result.applicable:
+                print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.")
+                return 1
+            print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
+            return 0
+
+        if args.command in (
+            "review-project",
+            "review-area",
+            "review-resource",
+            "review-reference",
+            "review-meeting",
+        ):
+            _, _, kind = args.command.partition("-")
+            spec = spec_by_kind[kind]
+            request = ReviewRequest(title=args.title, actor=actor, since=args.since)
+            result = execute_review(request, spec=spec)
+            if not result.applicable:
+                print(f"Not applicable: '{args.title}' does not exist.")
+                return 1
+            print(
+                f"Reviewed '{result.project.title}': {result.assessment.conclusion.value} "
+                f"({'; '.join(result.assessment.basis)})"
+            )
+            return 0
+
+        if args.command in ("enrich-project", "enrich-area", "enrich-resource"):
+            _, _, kind = args.command.partition("-")
+            spec = spec_by_kind[kind]
+            request = KnowledgeRequest(
+                title=args.title,
+                understanding_title=args.understanding_title,
+                understanding=args.understanding,
+                provenance=tuple(args.provenance),
+                actor=actor,
+            )
+            result = execute_knowledge(request, spec=spec)
+            if not result.applicable:
+                print(f"Not applicable: '{args.title}' cannot be enriched.")
+                return 1
+            print(f"Enriched '{result.project.title}' -> {result.event.event_type}")
+            return 0
+
+        return 1
 
 
 if __name__ == "__main__":
