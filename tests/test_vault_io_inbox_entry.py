@@ -5,9 +5,11 @@ Inbox. Everything here runs against `tmp_path`, with a secret file placed
 outside the Inbox to prove it stays unreachable.
 """
 
+import os
+
 import pytest
 
-from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries
+from ohtli.vault_io.markdown import find_inbox_entry, list_inbox_entries, read_inbox_entry
 
 
 @pytest.fixture
@@ -136,3 +138,107 @@ def test_finding_an_entry_reads_and_changes_nothing(vault):
         _find(vault, name)
 
     assert {p: p.read_bytes() for p in vault.rglob("*") if p.is_file()} == before
+
+
+# ---- entries that are not a readable regular file are not entries at all ------------
+#
+# A directory, a dangling symlink or a named pipe named `x.md` is not a file a
+# person dropped into the Inbox to be processed: it is skipped entirely, the
+# same way a file in a subdirectory already is. (A regular file that is not
+# UTF-8 IS still an entry: Processing refuses it with a reason instead of
+# making it vanish — see `tests/test_cli_process_inbox_entry.py`.)
+
+
+def _symlink(link, target):
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symbolic links are not available here")
+
+
+def test_a_directory_named_like_an_entry_is_not_an_entry(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "trap.md").mkdir()
+    (inbox / "real.md").write_text("a\n", encoding="utf-8")
+
+    assert [p.name for p in list_inbox_entries(base_dir=inbox)] == ["real.md"]
+    assert find_inbox_entry("trap", base_dir=inbox) is None
+
+
+def test_a_dangling_symlink_named_like_an_entry_is_not_an_entry(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    _symlink(inbox / "ghost.md", inbox / "nowhere.md")
+    (inbox / "real.md").write_text("a\n", encoding="utf-8")
+
+    assert [p.name for p in list_inbox_entries(base_dir=inbox)] == ["real.md"]
+    assert find_inbox_entry("ghost", base_dir=inbox) is None
+
+
+def test_a_named_pipe_named_like_an_entry_is_not_an_entry_and_is_never_opened(tmp_path):
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("named pipes are not available here")
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    os.mkfifo(inbox / "pipe.md")
+    (inbox / "real.md").write_text("a\n", encoding="utf-8")
+
+    assert [p.name for p in list_inbox_entries(base_dir=inbox)] == ["real.md"]
+    assert find_inbox_entry("pipe", base_dir=inbox) is None
+
+
+def test_a_non_utf8_file_is_still_listed_as_an_entry(tmp_path):
+    """Processing refuses it (a person dropped a real file there), it does
+    not just disappear from the listing."""
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "binary.md").write_bytes(b"\xff\xfe\x00 not utf-8 \x80\x81")
+
+    assert [p.name for p in list_inbox_entries(base_dir=inbox)] == ["binary.md"]
+    assert find_inbox_entry("binary", base_dir=inbox) is not None
+
+
+# ---- read_inbox_entry: its OWN guard, not just list_inbox_entries's ------------------
+#
+# `list_inbox_entries` already keeps non-regular entries out, so under normal
+# use `read_inbox_entry` is only ever called with a path it approved. These
+# test `read_inbox_entry` directly, as the backstop for the window between
+# listing an entry and reading it (the same reason Capture's write is
+# exclusive and Processing's Update revalidates right before writing): a
+# regression here would only show up as a race, never in ordinary use.
+
+
+def test_read_inbox_entry_on_a_directory_returns_none_without_raising(tmp_path):
+    directory = tmp_path / "was-a-file.md"
+    directory.mkdir()
+
+    assert read_inbox_entry(directory) is None
+
+
+def test_read_inbox_entry_on_a_dangling_symlink_returns_none_without_raising(tmp_path):
+    link = tmp_path / "ghost.md"
+    _symlink(link, tmp_path / "nowhere.md")
+
+    assert read_inbox_entry(link) is None
+
+
+def test_read_inbox_entry_on_a_named_pipe_returns_none_without_ever_opening_it(tmp_path, monkeypatch):
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("named pipes are not available here")
+    pipe = tmp_path / "pipe.md"
+    os.mkfifo(pipe)
+
+    def must_not_be_read(*args, **kwargs):
+        raise AssertionError("a named pipe must be skipped without being read")
+
+    monkeypatch.setattr(type(pipe), "read_text", must_not_be_read)
+
+    assert read_inbox_entry(pipe) is None
+
+
+def test_read_inbox_entry_on_a_real_file_still_returns_its_text(tmp_path):
+    entry = tmp_path / "real.md"
+    entry.write_text("hello\n", encoding="utf-8")
+
+    assert read_inbox_entry(entry) == "hello\n"

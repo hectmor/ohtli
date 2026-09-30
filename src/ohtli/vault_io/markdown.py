@@ -252,6 +252,24 @@ def list_existing_journal_entry_titles(*, base_dir: Path | None = None) -> set[s
     return _list_existing_titles(directory)
 
 
+def _frontmattered_text(md_file: Path) -> str | None:
+    """`md_file`'s text, or `None` if it is not a readable frontmattered file:
+    not a regular file (a directory, a symlink to nowhere, a named pipe — the
+    `is_file()` check must come first, or a named pipe would hang the read),
+    not UTF-8, or without frontmatter at all. The shared tolerance every scan
+    over a note folder needs (`_list_existing_titles`, this one), so a single
+    odd entry cannot break the whole scan. Read-only: a symlink to a real note
+    is followed, unlike `inspect_target`, which also guards writes.
+    """
+    if not md_file.is_file():
+        return None
+    try:
+        text = md_file.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return None
+    return text if text.startswith("---\n") else None
+
+
 def _list_notes_linking_to(directory: Path, target_id: str, relationship_type: str) -> list[dict[str, Any]]:
     """The notes in a directory whose Current Relationship Set holds a
     `relationship_type` instance pointing at `target_id`.
@@ -261,15 +279,16 @@ def _list_notes_linking_to(directory: Path, target_id: str, relationship_type: s
     target, so nothing can go stale or contradict the source. Read directly from
     the vault on every call; it writes nothing.
 
-    Notes without frontmatter (navigation notes) are skipped, as in
-    `_list_existing_titles`. Sorted by title so the result is deterministic.
+    Notes without frontmatter (navigation notes), and anything that is not a
+    readable frontmattered file, are skipped: see `_frontmattered_text`.
+    Sorted by title so the result is deterministic.
     """
     if not directory.exists():
         return []
 
     found = []
     for md_file in directory.glob("*.md"):
-        if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+        if _frontmattered_text(md_file) is None:
             continue
         representation = read_note(md_file)
         properties = representation["properties"] or {}
@@ -304,13 +323,15 @@ def find_note_by_id(directory: Path, target_id: str) -> dict[str, Any] | None:
     target note no longer exists) returns `None` rather than raising: the caller
     treats "nothing to resolve" as "no dependency", not an error.
 
-    Read directly from the vault on every call; it writes nothing.
+    Anything that is not a readable frontmattered file is skipped: see
+    `_frontmattered_text`. Read directly from the vault on every call; it
+    writes nothing.
     """
     if not directory.exists():
         return None
 
     for md_file in directory.glob("*.md"):
-        if not md_file.read_text(encoding="utf-8").startswith("---\n"):
+        if _frontmattered_text(md_file) is None:
             continue
         representation = read_note(md_file)
         properties = representation["properties"] or {}
@@ -340,6 +361,13 @@ def list_inbox_entries(*, base_dir: Path | None = None) -> list[Path]:
     Object`), so unlike `list_existing_titles` they cannot be told apart
     from navigation notes by content. Reserved navigation filenames are
     excluded by name instead.
+
+    A directory, a dangling symlink or a named pipe named `x.md` is not an
+    entry either: something a person dropped in the Inbox to be processed is
+    a regular file, and `list_inbox_entries` must never be the thing that
+    opens a named pipe. A regular file that turns out not to be UTF-8 IS
+    still an entry — `read_inbox_entry` reports that, rather than this
+    function making it silently vanish from every listing.
     """
     directory = base_dir if base_dir is not None else paths.INBOX_DIR
     if not directory.exists():
@@ -348,7 +376,7 @@ def list_inbox_entries(*, base_dir: Path | None = None) -> list[Path]:
     return sorted(
         md_file
         for md_file in directory.glob("*.md")
-        if md_file.name not in _RESERVED_INBOX_FILENAMES
+        if md_file.name not in _RESERVED_INBOX_FILENAMES and md_file.is_file()
     )
 
 
@@ -378,8 +406,18 @@ def find_inbox_entry(name: str, *, base_dir: Path | None = None) -> Path | None:
     return None
 
 
-def read_inbox_entry(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def read_inbox_entry(path: Path) -> str | None:
+    """`path`'s text, or `None` if it is not a readable UTF-8 file: it
+    changed (or vanished) since it was listed, or is a regular file a person
+    dropped in the Inbox that is not text at all. `None` here means "cannot
+    be read", not "empty" — Processing refuses it with a reason rather than
+    treating it as a blank entry."""
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return None
 
 
 def resolve_inbox_entry(path: Path) -> None:

@@ -257,6 +257,18 @@ def execute_processing(
     vault content.
     """
     raw_text = read_inbox_entry(request.entry_path)
+    if raw_text is None:
+        # The entry is not a readable UTF-8 file: a person dropped a real
+        # file there, so it is refused with a reason, not treated as blank.
+        return ProcessingResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="unreadable_entry",
+            blocked_path=request.entry_path,
+        )
     existing_titles = spec.list_existing_titles(base_dir=base_dir)
 
     if not processing.is_applicable(raw_text):

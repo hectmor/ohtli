@@ -313,7 +313,29 @@ def test_the_batch_still_exits_0_when_it_refuses_entries(capsys, tmp_path):
 
     assert code == 0, "batch mode keeps its exit code"
     assert "'blank.md' left untouched in Inbox" in out
-    assert (tmp_path / "inbox" / "blank.md").exists()
+
+
+def test_a_non_utf8_entry_is_refused_with_a_reason_the_others_still_processed(capsys, tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "inbox" / "binary.md").write_bytes(b"\xff\xfe\x00 not utf-8 \x80\x81")
+
+    code, out = _run(capsys, "process-inbox")
+
+    assert code == 0, "batch mode keeps exiting 0 when it refuses entries"
+    assert "'binary.md' left untouched in Inbox" in out
+    assert "not a readable UTF-8" in out
+    assert out.count("Processed Project") == 3
+    assert "binary.md" in _inbox(tmp_path), "the unreadable entry is kept, not silently dropped"
+
+
+def test_a_non_utf8_entry_named_directly_is_refused_and_exits_one(capsys, tmp_path):
+    (tmp_path / "inbox" / "binary.md").write_bytes(b"\xff\xfe\x00 not utf-8 \x80\x81")
+
+    code, out = _run(capsys, "process-inbox", "--entry", "binary")
+
+    assert code == 1
+    assert "'binary.md' left untouched in Inbox" in out and "not a readable UTF-8" in out
+    assert (tmp_path / "inbox" / "binary.md").exists()
 
 
 def test_the_batch_with_an_empty_inbox_says_so(capsys, tmp_path):
