@@ -44,6 +44,7 @@ Every automated entry point must declare which Actor it is and must target an ex
 * Ohtli keeps no Automation history: the invoker owns scheduling, retries and deduplication.
 * Attribution depends on the invoker declaring its Actor honestly.
 * The CLI needs a way to declare a non-human Actor. It has one since Phase 37c (#153): `ohtli --actor <actor> <command>`, placed before the command, defaulting to `human`. It is attribution only, as decided above.
+* The CLI needs a way to target an explicitly chosen vault instead of always writing to the real one. It has one since #166: `ohtli --vault <dir> <command>`, placed before the command like `--actor`, optional and defaulting to the real vault (unlike the scripts, where it is required: the CLI's everyday use is interactive, against the real vault). An automated entry point that also wants to satisfy the line above in full still has to pass both flags itself; nothing in the CLI requires `--vault` merely because `--actor` is non-human.
 
 ## Related Decisions
 

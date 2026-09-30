@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from pathlib import Path
 
@@ -7,22 +8,64 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 VAULT_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault"
 
-PROJECTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "projects"
-AREAS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "areas"
-RESOURCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "resources"
-REFERENCES_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "references"
-MEETINGS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "meetings"
-# Deliberately `journal/entries`, never `journal/daily`: the latter is owned by
-# the user's Obsidian Daily Notes plugin (`.obsidian/daily-notes.json`).
-JOURNAL_ENTRIES_DIR = (
-    _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "journal" / "entries"
-)
-INBOX_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / "inbox"
-EVENTS_DIR = _REPO_ROOT / "implementations" / "platforms" / "obsidian" / "vault" / ".ohtli"
-# Generated (derived) dashboards live in a folder of their own that nothing else
-# reads or writes, so they can never collide with a Domain Object note or be
-# overwritten by a Capture, and no path-based lookup can mistake one for an Area.
-AREA_DASHBOARDS_DIR = VAULT_DIR / "dashboards" / "areas"
+# Every writable location's path relative to the vault root: the single
+# source of truth for the vault's folder layout. `vault_root` below uses it
+# to point a DIFFERENT vault (`ohtli --vault DIR`) at this exact shape, and
+# nothing may derive a subfolder name any other way — taking only a
+# constant's `.name` would drop `JOURNAL_ENTRIES_DIR`'s `journal/`, and would
+# collide `AREA_DASHBOARDS_DIR`'s name with `AREAS_DIR`'s.
+_LAYOUT: dict[str, str] = {
+    "PROJECTS_DIR": "projects",
+    "AREAS_DIR": "areas",
+    "RESOURCES_DIR": "resources",
+    "REFERENCES_DIR": "references",
+    "MEETINGS_DIR": "meetings",
+    # Deliberately `journal/entries`, never `journal/daily`: the latter is owned by
+    # the user's Obsidian Daily Notes plugin (`.obsidian/daily-notes.json`).
+    "JOURNAL_ENTRIES_DIR": "journal/entries",
+    "INBOX_DIR": "inbox",
+    "EVENTS_DIR": ".ohtli",
+    # Generated (derived) dashboards live in a folder of their own that nothing else
+    # reads or writes, so they can never collide with a Domain Object note or be
+    # overwritten by a Capture, and no path-based lookup can mistake one for an Area.
+    "AREA_DASHBOARDS_DIR": "dashboards/areas",
+}
+
+PROJECTS_DIR = VAULT_DIR / _LAYOUT["PROJECTS_DIR"]
+AREAS_DIR = VAULT_DIR / _LAYOUT["AREAS_DIR"]
+RESOURCES_DIR = VAULT_DIR / _LAYOUT["RESOURCES_DIR"]
+REFERENCES_DIR = VAULT_DIR / _LAYOUT["REFERENCES_DIR"]
+MEETINGS_DIR = VAULT_DIR / _LAYOUT["MEETINGS_DIR"]
+JOURNAL_ENTRIES_DIR = VAULT_DIR / _LAYOUT["JOURNAL_ENTRIES_DIR"]
+INBOX_DIR = VAULT_DIR / _LAYOUT["INBOX_DIR"]
+EVENTS_DIR = VAULT_DIR / _LAYOUT["EVENTS_DIR"]
+AREA_DASHBOARDS_DIR = VAULT_DIR / _LAYOUT["AREA_DASHBOARDS_DIR"]
+
+
+@contextlib.contextmanager
+def vault_root(root: Path):
+    """Point the whole vault layout at `root` for the duration of the `with`
+    block, then put every constant back — even if the block raises.
+
+    `ohtli --vault DIR` uses this: every `execute_*`/`read_*` call that omits
+    `base_dir`/`events_dir` (most of them, throughout `cli.py`) falls back to
+    these module constants at call time, so patching them here redirects the
+    whole CLI without threading an override through every call site — the
+    same reason `tests/conftest.py`'s autouse fixture patches `EVENTS_DIR`
+    and `AREA_DASHBOARDS_DIR` for tests, generalized to every constant and to
+    production use. Restoring afterwards matters because `main()` can run
+    many times in one process and must never leak one `--vault` into the next
+    call.
+    """
+    before = {"VAULT_DIR": VAULT_DIR}
+    before.update((name, globals()[name]) for name in _LAYOUT)
+    try:
+        globals()["VAULT_DIR"] = root
+        for name, sub in _LAYOUT.items():
+            globals()[name] = root / sub
+        yield
+    finally:
+        globals().update(before)
 
 
 def slugify(title: str) -> str:
