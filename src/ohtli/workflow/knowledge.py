@@ -29,3 +29,22 @@ def is_applicable(understanding: str, provenance: tuple[str, ...]) -> bool:
     perform.
     """
     return bool(understanding.strip()) and bool(provenance) and all(p.strip() for p in provenance)
+
+
+def is_target_located(*, matches: int) -> bool:
+    """The note to enrich is located only when exactly one note carries the
+    title.
+
+    Meaningful once `is_applicable` holds. Knowledge always enriches an
+    existing note — there is no Create-shaped path, unlike Processing — so
+    this is the only location check it needs. Zero matches means the title
+    exists only in name (a hand-made file, or a note of a different type):
+    nothing of the right kind to enrich. More than one is ambiguous:
+    Knowledge must not guess which note to enrich. Not imported from
+    `processing.py`: workflows never call each other, and "update" is the
+    wrong concept here.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1
