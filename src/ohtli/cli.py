@@ -96,6 +96,26 @@ def _inbox_reason(result, label: str) -> str:
     return ""
 
 
+def _enrich_reason(result, label: str) -> str:
+    """The sentence that follows "cannot be enriched." when Knowledge's
+    Externalize could not locate the note to enrich: nothing for a refusal
+    without a reason (blank understanding or provenance), which keeps its
+    original message.
+
+    Not `_inbox_reason`: this is never an Inbox entry, so "process again" /
+    "update" would be the wrong verbs here. Knowledge always enriches an
+    existing note (#160) — there is no Create-shaped refusal to cover."""
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then enrich again."
+        )
+    if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
+        return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    return ""
+
+
 def main(argv: list[str] | None = None) -> int:
     spec_by_kind = {
         "project": PROJECT,
@@ -645,7 +665,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = execute_knowledge(request, spec=spec)
             if not result.applicable:
-                print(f"Not applicable: '{args.title}' cannot be enriched.")
+                label = kind.title()
+                print(f"Not applicable: '{args.title}' cannot be enriched.{_enrich_reason(result, label)}")
                 return 1
             print(f"Enriched '{result.project.title}' -> {result.event.event_type}")
             return 0
