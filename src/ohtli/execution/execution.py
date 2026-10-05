@@ -738,6 +738,17 @@ class KnowledgeResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
+    # Only set when the note to enrich could not be located: why, and what is
+    # in the way. `ambiguous_title` (more than one note of this type carries
+    # the title; every one of them is in `candidates`) or `not_an_ohtli_note`
+    # (none does; `blocked_path` names the offending file, when one can be
+    # identified). `search_title` carries the title, for the CLI's message.
+    # The same shape Processing's Update result carries (#156): the flaw was
+    # identical (locate by slug, even though chosen by title).
+    reason: str | None = None
+    blocked_path: Path | None = None
+    candidates: tuple[Path, ...] = ()
+    search_title: str | None = None
 
 
 def execute_knowledge(
@@ -762,16 +773,57 @@ def execute_knowledge(
     to the representation: Externalize's own definition is enriching
     an existing object, and Epistemic Provenance is only testable
     against a persisted representation.
+
+    The note to enrich is located by TITLE, not by the slug its title
+    happens to map to (the flaw Processing's Update had, #156): a note
+    renamed since it was captured is still found; a different note already
+    sitting at that slug is never mistaken for it, and never half-rewritten
+    before its identity is checked (`understanding`/`provenance` is checked
+    first, so it never depends on what -- if anything -- sits at the slug).
     """
     if not knowledge_workflow.is_externalize_target(spec.domain_type.__name__):
         return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
 
-    path = spec.file_path(request.title, base_dir=base_dir)
-    if not path.exists():
-        return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
-
     if not knowledge_workflow.is_applicable(request.understanding, request.provenance):
         return KnowledgeResult(request=request, applicable=False, project=None, path=None, event=None)
+
+    directory = spec.file_path(request.title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, request.title, spec.note_type)
+    if not knowledge_workflow.is_target_located(matches=len(matches)):
+        ambiguous = len(matches) > 1
+        return KnowledgeResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="ambiguous_title" if ambiguous else "not_an_ohtli_note",
+            blocked_path=None if ambiguous else find_any_note_titled(directory, request.title),
+            candidates=tuple(matches) if ambiguous else (),
+            search_title=request.title,
+        )
+    path = matches[0]
+
+    # Revalidated right before the write: closes the gap between locating the
+    # note above and rewriting it below, the same way Capture's exclusive
+    # create closes the gap between checking a path and writing to it.
+    occupant = inspect_target(path)
+    if (
+        occupant is None
+        or occupant["kind"] != "note"
+        or occupant["note_type"] != spec.note_type
+        or occupant["title"] != request.title
+    ):
+        return KnowledgeResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note",
+            blocked_path=path,
+            search_title=request.title,
+        )
 
     representation = spec.read(path)
     enriched_representation = understanding_transform.enrich(
