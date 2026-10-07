@@ -408,11 +408,18 @@ class ArchiveResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
-    # Only set by Archive (never Reactivate) when not applicable: "missing",
-    # "wrong_context", or "operational_dependents". `archive-workflow.md`
+    # "missing", "ambiguous_title", "not_an_ohtli_note", "wrong_context", or
+    # (Archive only) "operational_dependents". `archive-workflow.md`
     # ("Archive does not determine how the dependency should be resolved")
     # means the human needs to be told which one, not just that it failed.
+    # The location reasons (#161) are shared by Archive and Reactivate alike,
+    # the same shape Processing's Update (#156) and Knowledge's Externalize
+    # (#160) carry.
     reason: str | None = None
+    blocked_path: Path | None = None
+    candidates: tuple[Path, ...] = ()
+    search_title: str | None = None
+    dependents: tuple[dict[str, Any], ...] = ()
 
 
 def _execute_contextual_transition(
@@ -421,20 +428,88 @@ def _execute_contextual_transition(
     spec: DomainSpec,
     base_dir: Path | None,
     events_dir: Path | None,
-    is_applicable: Callable[[str], bool],
+    is_applicable: Callable[[str, tuple[dict[str, Any], ...]], bool],
     transition: Callable[[dict[str, Any]], dict[str, Any]],
     event_verb: str,
     workflow: str,
+    dependents_of: Callable[[dict[str, Any]], tuple[dict[str, Any], ...]] = lambda _representation: (),
 ) -> ArchiveResult:
-    path = spec.file_path(request.title, base_dir=base_dir)
-    if not path.exists():
-        return ArchiveResult(request=request, applicable=False, project=None, path=None, event=None)
+    """Shared by Archive and Reactivate (`archive-workflow.md`: two
+    operations of the same workflow). The note to transition is located by
+    TITLE, not by the slug the title happens to map to (#161, the same flaw
+    Processing's Update (#156) and Knowledge's Externalize (#160) had): a
+    note renamed since it was captured is still found here, and a different
+    note already sitting at that slug is never mistaken for it.
+
+    `dependents_of` is Operational Integrity's hook (Archive only; Reactivate
+    uses the default, which has none to check) — gathered from the already-
+    located representation, so it is never a second, independent slug-based
+    lookup of the source note.
+    """
+    directory = spec.file_path(request.title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, request.title, spec.note_type)
+    if not archive_workflow.is_target_located(matches=len(matches)):
+        if len(matches) > 1:
+            return ArchiveResult(
+                request=request,
+                applicable=False,
+                project=None,
+                path=None,
+                event=None,
+                reason="ambiguous_title",
+                candidates=tuple(matches),
+                search_title=request.title,
+            )
+        blocked_path = find_any_note_titled(directory, request.title)
+        return ArchiveResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note" if blocked_path is not None else "missing",
+            blocked_path=blocked_path,
+            search_title=request.title,
+        )
+    path = matches[0]
+
+    # Revalidated right before the write: closes the gap between locating
+    # the note above and rewriting it below, the same way Capture's
+    # exclusive create closes the gap between checking a path and writing
+    # to it.
+    occupant = inspect_target(path)
+    if (
+        occupant is None
+        or occupant["kind"] != "note"
+        or occupant["note_type"] != spec.note_type
+        or occupant["title"] != request.title
+    ):
+        return ArchiveResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note",
+            blocked_path=path,
+            search_title=request.title,
+        )
 
     representation = spec.read(path)
     current_context = representation["properties"].get("context")
+    dependents = dependents_of(representation)
 
-    if not is_applicable(current_context):
-        return ArchiveResult(request=request, applicable=False, project=None, path=None, event=None)
+    if not is_applicable(current_context, dependents):
+        reason = "operational_dependents" if dependents else "wrong_context"
+        return ArchiveResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason=reason,
+            dependents=dependents,
+        )
 
     updated_representation = transition(representation)
     rewrite_note(path, updated_representation)
@@ -451,19 +526,17 @@ def _execute_contextual_transition(
     return ArchiveResult(request=request, applicable=True, project=domain_object, path=path, event=event)
 
 
-def read_operational_dependents(
-    title: str, spec: DomainSpec, *, base_dir: Path | None = None
+def _operational_dependents(
+    representation: dict[str, Any], *, base_dir: Path | None
 ) -> tuple[dict[str, Any], ...]:
-    """The still-operational objects `title` (of `spec`'s type) is required
-    by, per `archive-workflow.md`'s Operational Integrity: the targets of
-    `title`'s own `archive_workflow.OPERATIONALLY_REQUIRING_TYPES`
-    relationships (today: `supports`) whose `context` is still `operational`.
+    """The still-operational objects `representation` is required by, per
+    `archive-workflow.md`'s Operational Integrity: the targets of its own
+    `archive_workflow.OPERATIONALLY_REQUIRING_TYPES` relationships (today:
+    `supports`) whose `context` is still `operational`.
 
-    Not an `execute_*` operation: a read, no actor, no request, no event —
-    same precedent as `read_contained_projects`. Empty when the note doesn't
-    exist, has no such relationships, or every target has gone historical or
-    is unresolvable (`find_note_by_id` treats a dangling `target_id` as "no
-    dependency", not an error).
+    Takes the already-located representation, not a title: the source note
+    is located exactly once, by `_execute_contextual_transition`, never by a
+    second, independent slug-based lookup (#161).
 
     The target's directory is derived from `base_dir`'s sibling by
     `note_type` when `base_dir` is given (the convention every multi-type
@@ -471,11 +544,6 @@ def read_operational_dependents(
     type, sharing one parent), or from the target spec's own real-vault
     default otherwise.
     """
-    path = spec.file_path(title, base_dir=base_dir)
-    if not path.exists():
-        return ()
-
-    representation = spec.read(path)
     entries = representation["properties"].get("relationships") or []
 
     dependents = []
@@ -502,6 +570,25 @@ def read_operational_dependents(
     return tuple(dependents)
 
 
+def read_operational_dependents(
+    title: str, spec: DomainSpec, *, base_dir: Path | None = None
+) -> tuple[dict[str, Any], ...]:
+    """The still-operational objects `title` (of `spec`'s type) is required
+    by, per `archive-workflow.md`'s Operational Integrity.
+
+    Not an `execute_*` operation: a read, no actor, no request, no event —
+    same precedent as `read_contained_projects`. Located by TITLE, not by the
+    slug the title happens to map to (#161): a note renamed since it was
+    captured is still found, and empty — not an error — whenever the title
+    does not resolve to exactly one note of `spec`'s type.
+    """
+    directory = spec.file_path(title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, title, spec.note_type)
+    if len(matches) != 1:
+        return ()
+    return _operational_dependents(spec.read(matches[0]), base_dir=base_dir)
+
+
 def execute_archive(
     request: ArchiveRequest,
     *,
@@ -517,35 +604,22 @@ def execute_archive(
     (`archive-workflow.md`'s Lifecycle Independence invariant).
 
     Refused, per Operational Integrity, while another operational object
-    still `supports`-requires this one — checked via `read_operational_
-    dependents` before the actual (unchanged) applicability/transition
-    machinery runs, so `_execute_contextual_transition` and Reactivate's
-    path stay untouched.
+    still `supports`-requires this one — gathered by
+    `_execute_contextual_transition`'s `dependents_of` hook from the
+    already-located note, never a second, independent slug-based lookup.
     """
-    dependents = read_operational_dependents(request.title, spec, base_dir=base_dir)
-    result = _execute_contextual_transition(
+    return _execute_contextual_transition(
         request,
         spec=spec,
         base_dir=base_dir,
         events_dir=events_dir,
-        is_applicable=lambda ctx: archive_workflow.is_applicable(
+        is_applicable=lambda ctx, dependents: archive_workflow.is_applicable(
             ctx, has_operational_dependents=bool(dependents)
         ),
         transition=archive_transform.archive,
         event_verb="Archived",
         workflow="archive",
-    )
-    if result.applicable:
-        return result
-
-    if not spec.file_path(request.title, base_dir=base_dir).exists():
-        reason = "missing"
-    elif dependents:
-        reason = "operational_dependents"
-    else:
-        reason = "wrong_context"
-    return ArchiveResult(
-        request=result.request, applicable=False, project=None, path=None, event=None, reason=reason
+        dependents_of=lambda representation: _operational_dependents(representation, base_dir=base_dir),
     )
 
 
@@ -559,14 +633,16 @@ def execute_reactivate(
     """Execute the Reactivate operation: restore operational presence.
 
     The inverse of `execute_archive`. Does not imply any lifecycle
-    transition.
+    transition. Operational Integrity is Archive-only: Reactivate uses
+    `_execute_contextual_transition`'s default `dependents_of`, so it can
+    never report `operational_dependents`.
     """
     return _execute_contextual_transition(
         request,
         spec=spec,
         base_dir=base_dir,
         events_dir=events_dir,
-        is_applicable=archive_workflow.is_reactivate_applicable,
+        is_applicable=lambda ctx, _dependents: archive_workflow.is_reactivate_applicable(ctx),
         transition=archive_transform.reactivate,
         event_verb="Reactivated",
         workflow="reactivate",
