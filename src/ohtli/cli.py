@@ -142,6 +142,29 @@ def _archive_reason(result, label: str, operation: str) -> str:
     return ""
 
 
+def _relationship_reason(result, *, source_label: str, target_label: str, operation: str) -> str:
+    """The sentence appended to a link/unlink refusal when an end -- the
+    source, or a named target -- could not be located (#162); nothing for
+    `missing` or the Interaction Model's own refusals (undefined
+    relationship, cardinality reached, already/not linked), which keep
+    their original message.
+
+    Not `_archive_reason`/`_enrich_reason`/`_inbox_reason`: a relationship
+    has two ends, so the label to use (`source_label`/`target_label`)
+    depends on `result.end` -- the two can share a title, so naming the
+    right one matters."""
+    label = source_label if result.end == "source" else target_label
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then {operation} again."
+        )
+    if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
+        return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    return ""
+
+
 def main(argv: list[str] | None = None) -> int:
     spec_by_kind = {
         "project": PROJECT,
@@ -498,10 +521,16 @@ def main(argv: list[str] | None = None) -> int:
                     target_spec=target_spec,
                 )
                 if not result.applicable:
+                    reason = _relationship_reason(
+                        result,
+                        source_label=source_spec.display_name,
+                        target_label=target_spec.display_name,
+                        operation="link",
+                    )
                     print(
                         f"Not applicable: cannot link {args.from_type} '{args.from_title}' "
                         f"to {args.to_type} '{args.to_title}' (both must exist, it must not "
-                        "already be linked, and the cardinality must allow it)."
+                        f"already be linked, and the cardinality must allow it).{reason}"
                     )
                     return 1
                 print(f"{result.event.event_type}: '{args.from_title}' {definition.relationship_type} '{args.to_title}'")
@@ -518,9 +547,15 @@ def main(argv: list[str] | None = None) -> int:
                 target_spec=target_spec if args.to_title is not None else None,
             )
             if not result.applicable:
+                reason = _relationship_reason(
+                    result,
+                    source_label=source_spec.display_name,
+                    target_label=target_spec.display_name,
+                    operation="unlink",
+                )
                 print(
                     f"Not applicable: cannot unlink {args.from_type} '{args.from_title}'. "
-                    "It must exist and be linked; a 0..* relationship also needs --to."
+                    f"It must exist and be linked; a 0..* relationship also needs --to.{reason}"
                 )
                 return 1
             print(f"{result.event.event_type}: '{args.from_title}'")
@@ -532,9 +567,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = execute_relate(request)
             if not result.applicable:
+                reason = _relationship_reason(
+                    result, source_label="Project", target_label="Area", operation="link"
+                )
                 print(
                     f"Not applicable: cannot link Project '{args.project}' to Area '{args.area}' "
-                    "(both must exist, and a Project belongs to at most one Area)."
+                    f"(both must exist, and a Project belongs to at most one Area).{reason}"
                 )
                 return 1
             print(f"{result.event.event_type}: '{args.project}' belongs to '{args.area}'")
@@ -544,7 +582,10 @@ def main(argv: list[str] | None = None) -> int:
             request = UnrelateRequest(source_title=args.project, actor=actor)
             result = execute_unrelate(request)
             if not result.applicable:
-                print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.")
+                reason = _relationship_reason(
+                    result, source_label="Project", target_label="Area", operation="unlink"
+                )
+                print(f"Not applicable: Project '{args.project}' does not exist or belongs to no Area.{reason}")
                 return 1
             print(f"{result.event.event_type}: '{args.project}'")
             return 0

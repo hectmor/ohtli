@@ -969,6 +969,98 @@ class RelationshipResult:
     source: object | None
     path: Path | None
     event: Event | None
+    # Only set when an end -- the source, or a named target -- could not be
+    # located (#162): "missing", "ambiguous_title" (every match in
+    # `candidates`) or "not_an_ohtli_note" (`blocked_path`, when one can be
+    # identified). `search_title` carries the title looked for. `end`
+    # ("source"/"target") says which of the two it was: source and target
+    # can share a title, so `search_title` alone would not tell them apart.
+    # The Interaction Model's own refusals (undefined relationship,
+    # cardinality reached, already/not linked) keep `reason=None`, as before.
+    reason: str | None = None
+    blocked_path: Path | None = None
+    candidates: tuple[Path, ...] = ()
+    search_title: str | None = None
+    end: str | None = None
+
+
+def _locate_relationship_end(
+    request: RelateRequest | UnrelateRequest,
+    *,
+    spec: DomainSpec,
+    title: str,
+    base_dir: Path | None,
+    end: str,
+) -> tuple[Path, None] | tuple[None, RelationshipResult]:
+    """Locate one end of a Relate/Unrelate -- the source, or a named target
+    -- by TITLE, not by the slug the title happens to map to (#162, the same
+    flaw Processing's Update (#156), Knowledge's Externalize (#160) and
+    Archive/Reactivate (#161) had). Returns `(path, None)` once located, or
+    `(None, result)` with the refusal to return as-is.
+    """
+    directory = spec.file_path(title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, title, spec.note_type)
+    if processing.is_relationship_end_located(matches=len(matches)):
+        return matches[0], None
+    if len(matches) > 1:
+        return None, RelationshipResult(
+            request=request,
+            applicable=False,
+            source=None,
+            path=None,
+            event=None,
+            reason="ambiguous_title",
+            candidates=tuple(matches),
+            search_title=title,
+            end=end,
+        )
+    blocked_path = find_any_note_titled(directory, title)
+    return None, RelationshipResult(
+        request=request,
+        applicable=False,
+        source=None,
+        path=None,
+        event=None,
+        reason="not_an_ohtli_note" if blocked_path is not None else "missing",
+        blocked_path=blocked_path,
+        search_title=title,
+        end=end,
+    )
+
+
+def _revalidate_relationship_end(
+    request: RelateRequest | UnrelateRequest,
+    *,
+    path: Path,
+    spec: DomainSpec,
+    title: str,
+    end: str,
+) -> tuple[dict[str, str], None] | tuple[None, RelationshipResult]:
+    """Revalidated right before it is read or written: closes the gap
+    between locating a relationship end above and acting on it below, the
+    same race-free backstop #156/#160/#161 use. Returns the `inspect_target`
+    occupant (its `id`/`title`, for a target, come from this single read —
+    never a second, separate `spec.read`, so they cannot disagree with the
+    identity check)."""
+    occupant = inspect_target(path)
+    if (
+        occupant is None
+        or occupant["kind"] != "note"
+        or occupant["note_type"] != spec.note_type
+        or occupant["title"] != title
+    ):
+        return None, RelationshipResult(
+            request=request,
+            applicable=False,
+            source=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note",
+            blocked_path=path,
+            search_title=title,
+            end=end,
+        )
+    return occupant, None
 
 
 def execute_relate(
@@ -984,37 +1076,59 @@ def execute_relate(
     relationship between two existing Domain Objects
     (`processing-workflow.md`).
 
-    Both notes must exist. Which relationships are allowed, toward which
-    target type, and how many, is decided by the canonical table in
-    `workflow/processing.py` — Processing may establish only
-    relationships the Interaction Model defines. The relationship is
-    stored on the source note only (the inverse is not stored) and
-    references the target by its stable `id`.
+    Both ends are located by TITLE, not by the slug the title happens to
+    map to (#162, the same flaw #156/#160/#161 had): a note renamed since it
+    was captured is still found at either end, and a different note already
+    sitting at that slug is never mistaken for it — for the target, that
+    would store the decoy's `id` in the source, a lasting wrong link.
+
+    Which relationships are allowed, toward which target type, and how
+    many, is decided by the canonical table in `workflow/processing.py` —
+    Processing may establish only relationships the Interaction Model
+    defines. The relationship is stored on the source note only (the
+    inverse is not stored) and references the target by its stable `id`.
 
     `base_dir` is the source's directory and `target_base_dir` the
     target's; both default to the real vault, and tests pass temporary
     directories so they never touch it.
     """
-    not_applicable = RelationshipResult(
-        request=request, applicable=False, source=None, path=None, event=None
+    source_path, refused = _locate_relationship_end(
+        request, spec=source_spec, title=request.source_title, base_dir=base_dir, end="source"
     )
+    if refused is not None:
+        return refused
+    target_path, refused = _locate_relationship_end(
+        request, spec=target_spec, title=request.target_title, base_dir=target_base_dir, end="target"
+    )
+    if refused is not None:
+        return refused
 
-    source_path = source_spec.file_path(request.source_title, base_dir=base_dir)
-    target_path = target_spec.file_path(request.target_title, base_dir=target_base_dir)
-    if not source_path.exists() or not target_path.exists():
-        return not_applicable
+    # The target is revalidated first, then the source last, as close to
+    # the write as possible.
+    target_occupant, refused = _revalidate_relationship_end(
+        request, path=target_path, spec=target_spec, title=request.target_title, end="target"
+    )
+    if refused is not None:
+        return refused
+    source_occupant, refused = _revalidate_relationship_end(
+        request, path=source_path, spec=source_spec, title=request.source_title, end="source"
+    )
+    if refused is not None:
+        return refused
 
     source_representation = source_spec.read(source_path)
-    target_representation = target_spec.read(target_path)
 
     source_type = source_spec.domain_type.__name__
     target_type = target_spec.domain_type.__name__
-    target_id = target_representation["properties"]["id"]
+    target_id = target_occupant["id"]
     definition = processing.relationship_definition(
         source_type, request.relationship_type, target_type
     )
     existing = relationship_transform.relationships_of_type(
         source_representation, request.relationship_type
+    )
+    not_applicable = RelationshipResult(
+        request=request, applicable=False, source=None, path=None, event=None
     )
     if not processing.is_relate_applicable(
         definition,
@@ -1029,7 +1143,7 @@ def execute_relate(
         relationship_type=request.relationship_type,
         target_id=target_id,
         target_type=target_spec.note_type,
-        target_link=_link_display(target_path, target_representation["title"]),
+        target_link=_link_display(target_path, target_occupant["title"]),
     )
     rewrite_note(source_path, linked)
     domain_object = source_spec.from_representation(linked)
@@ -1060,40 +1174,62 @@ def execute_unrelate(
 ) -> RelationshipResult:
     """Remove a relationship from a note.
 
+    The source, and a named target (`request.target_title`, with
+    `target_spec`), are each located by TITLE, not by the slug the title
+    happens to map to (#162, the same flaw #156/#160/#161 had): a note
+    renamed since it was captured is still found at either end, and a
+    different note already sitting at that slug is never mistaken for it —
+    for a named target, that would remove the wrong relationship entry, or
+    refuse a renamed, still-linked target as "not linked".
+
     A `0..1` relationship has at most one target, so naming it is
     optional (and, without it, this is what makes moving possible:
     unlink + link = two Events, since a changed relationship is a
     distinct instance — `relationship-representation.md`, "Relationship
     Changes"). A `0..*` relationship can hold many targets, so the
-    request must name which one (`request.target_title`, with
-    `target_spec`); exactly that instance is removed and the others are
-    kept.
-
-    The named target note must still exist: its stable `id` is what
-    identifies the instance to remove. Unlinking a dangling relationship
-    whose target note is gone is not handled here.
+    request must name which one; exactly that instance is removed and the
+    others are kept.
     """
     not_applicable = RelationshipResult(
         request=request, applicable=False, source=None, path=None, event=None
     )
 
-    path = spec.file_path(request.source_title, base_dir=base_dir)
-    if not path.exists():
+    if request.target_title is not None and target_spec is None:
         return not_applicable
 
-    representation = spec.read(path)
-    source_type = spec.domain_type.__name__
+    path, refused = _locate_relationship_end(
+        request, spec=spec, title=request.source_title, base_dir=base_dir, end="source"
+    )
+    if refused is not None:
+        return refused
 
     named_target_id: str | None = None
     target_type: str | None = None
+    target_path = None
     if request.target_title is not None:
-        if target_spec is None:
-            return not_applicable
-        target_path = target_spec.file_path(request.target_title, base_dir=target_base_dir)
-        if not target_path.exists():
-            return not_applicable
-        named_target_id = target_spec.read(target_path)["properties"]["id"]
+        target_path, refused = _locate_relationship_end(
+            request, spec=target_spec, title=request.target_title, base_dir=target_base_dir, end="target"
+        )
+        if refused is not None:
+            return refused
+
+    if target_path is not None:
+        target_occupant, refused = _revalidate_relationship_end(
+            request, path=target_path, spec=target_spec, title=request.target_title, end="target"
+        )
+        if refused is not None:
+            return refused
+        named_target_id = target_occupant["id"]
         target_type = target_spec.domain_type.__name__
+
+    source_occupant, refused = _revalidate_relationship_end(
+        request, path=path, spec=spec, title=request.source_title, end="source"
+    )
+    if refused is not None:
+        return refused
+
+    representation = spec.read(path)
+    source_type = spec.domain_type.__name__
 
     definition = processing.relationship_definition(
         source_type, request.relationship_type, target_type
