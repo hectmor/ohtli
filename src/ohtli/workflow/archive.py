@@ -37,3 +37,21 @@ def is_reactivate_applicable(current_context: str) -> bool:
     participates in historical context.
     """
     return current_context == HISTORICAL
+
+
+def is_target_located(*, matches: int) -> bool:
+    """The note to archive/reactivate is located only when exactly one note
+    carries the title.
+
+    Meaningful once the note is a candidate for either operation. Zero
+    matches means the title exists only in name (a hand-made file, or a note
+    of a different type): nothing of the right kind to transition. More than
+    one is ambiguous: Archive/Reactivate must not guess which note to
+    transition. Not imported from `knowledge.py` (#160) or `processing.py`
+    (#156), which already define the identical predicate: workflows never
+    call each other.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1

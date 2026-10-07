@@ -25,6 +25,7 @@ from ohtli.execution.execution import (
 from ohtli.execution.specs import AREA, MEETING, PROJECT, REFERENCE, RESOURCE
 from ohtli.vault_io.events import read_events
 from ohtli.workflow import archive as archive_workflow
+from ohtli.workflow import capture as capture_workflow
 
 SUPPORTS_PAIRS = [
     pytest.param(REFERENCE, PROJECT, id="reference-project"),
@@ -79,6 +80,16 @@ def _archive(tmp_path, spec, title):
         ArchiveRequest(title=title, actor=Actor.HUMAN), spec=spec, base_dir=tmp_path / spec.note_type,
         events_dir=tmp_path,
     )
+
+
+def _hand_text(spec, title, tmp_path, tag):
+    """The rendered text of a real, valid note titled `title`, of `spec`'s
+    type and with its own id, without placing it anywhere final."""
+    domain_object = capture_workflow.transform(title, spec.domain_type)
+    representation = spec.to_representation(domain_object)
+    scratch = tmp_path / "scratch" / tag
+    path = spec.write(representation, base_dir=scratch)
+    return path.read_text(encoding="utf-8")
 
 
 # ---- the mechanism, isolated (workflow layer) --------------------------------------
@@ -165,6 +176,74 @@ def test_read_operational_dependents_names_the_blocking_target(tmp_path, source,
     assert dependents[0]["context"] == "operational"
 
 
+# ---- the source is located by title, not by slug (#161) -----------------------------
+
+
+@pytest.mark.parametrize("source,target", SUPPORTS_PAIRS)
+def test_archiving_a_renamed_source_is_still_blocked_and_names_the_target(tmp_path, source, target):
+    src = _capture(tmp_path, source, "Source")
+    tgt = _capture(tmp_path, target, "Target")
+    _link(tmp_path, source, target, "supports")
+    renamed = src.path.parent / "renamed-source.md"
+    src.path.rename(renamed)
+    before = renamed.read_bytes()
+    events_before = len(read_events(events_dir=tmp_path))
+
+    result = _archive(tmp_path, source, "Source")
+
+    assert not result.applicable
+    assert result.reason == "operational_dependents"
+    assert [d["id"] for d in result.dependents] == [tgt.project.id]
+    assert result.event is None
+    assert renamed.read_bytes() == before
+    assert len(read_events(events_dir=tmp_path)) == events_before
+
+
+@pytest.mark.parametrize("source,target", SUPPORTS_PAIRS)
+def test_a_decoy_at_the_old_slug_is_never_archived_instead_of_the_renamed_source(tmp_path, source, target):
+    """Today, a decoy sitting at the old slug gets archived instead of the
+    renamed source -- silently, with no warning, and Operational Integrity
+    is bypassed because the decoy's own (empty) relationships are read."""
+    src = _capture(tmp_path, source, "Source")
+    _capture(tmp_path, target, "Target")
+    _link(tmp_path, source, target, "supports")
+    renamed = src.path.parent / "renamed-source.md"
+    src.path.rename(renamed)
+    decoy = _capture(tmp_path, source, "source")
+    decoy_bytes = decoy.path.read_bytes()
+
+    result = _archive(tmp_path, source, "Source")
+
+    assert not result.applicable and result.reason == "operational_dependents"
+    assert decoy.path.read_bytes() == decoy_bytes
+
+
+@pytest.mark.parametrize("source,target", SUPPORTS_PAIRS)
+def test_read_operational_dependents_finds_a_renamed_source(tmp_path, source, target):
+    src = _capture(tmp_path, source, "Source")
+    tgt = _capture(tmp_path, target, "Target")
+    _link(tmp_path, source, target, "supports")
+    src.path.rename(src.path.parent / "renamed-source.md")
+
+    dependents = read_operational_dependents("Source", source, base_dir=tmp_path / source.note_type)
+
+    assert [d["id"] for d in dependents] == [tgt.project.id]
+
+
+def test_an_ambiguous_source_refuses_before_dependents_are_even_checked(tmp_path):
+    directory = tmp_path / RESOURCE.note_type
+    directory.mkdir(parents=True)
+    a = directory / "a.md"
+    b = directory / "b.md"
+    a.write_text(_hand_text(RESOURCE, "Source", tmp_path, "a"), encoding="utf-8")
+    b.write_text(_hand_text(RESOURCE, "Source", tmp_path, "b"), encoding="utf-8")
+
+    result = _archive(tmp_path, RESOURCE, "Source")
+
+    assert not result.applicable and result.reason == "ambiguous_title"
+    assert result.dependents == ()
+
+
 # ---- direction matters: archiving the TARGET (requirer) is never blocked -----------
 
 
@@ -226,9 +305,13 @@ def test_read_operational_dependents_is_empty_for_a_note_that_does_not_exist(tmp
 # ---- reactivate is unaffected ---------------------------------------------------------
 
 
-def test_reactivate_never_sets_a_reason(tmp_path):
-    """Operational Integrity is Archive-only this phase; Reactivate results
-    never carry a `reason` (it stays the dataclass default, `None`)."""
+def test_reactivate_never_reports_operational_dependents(tmp_path):
+    """Operational Integrity is Archive-only (`is_reactivate_applicable`
+    takes no `has_operational_dependents`); `operational_dependents` is a
+    reason Reactivate can never produce. Location reasons (#161) are shared
+    by both operations, so a missing note still reports `missing`, not
+    `None` -- `_execute_contextual_transition` locates by title for either
+    operation, before any dependents/context check runs."""
     from ohtli.execution.execution import execute_reactivate
 
     result = execute_reactivate(
@@ -237,7 +320,7 @@ def test_reactivate_never_sets_a_reason(tmp_path):
         base_dir=tmp_path / "resource",
         events_dir=tmp_path,
     )
-    assert result.reason is None
+    assert result.reason == "missing"
 
 
 def test_a_pre_phase_13_target_with_no_context_field_still_blocks(tmp_path):

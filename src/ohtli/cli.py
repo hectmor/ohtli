@@ -26,7 +26,6 @@ from ohtli.execution.execution import (
     execute_unrelate,
     read_area_dashboard,
     read_contained_projects,
-    read_operational_dependents,
     write_area_dashboard,
 )
 from ohtli.execution.specs import AREA, JOURNAL_ENTRY, MEETING, PROJECT, REFERENCE, RESOURCE, display_name_of
@@ -110,6 +109,33 @@ def _enrich_reason(result, label: str) -> str:
         return (
             f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
             f"({names}); rename all but one, then enrich again."
+        )
+    if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
+        return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    return ""
+
+
+def _archive_reason(result, label: str, operation: str) -> str:
+    """The sentence that follows "cannot be {archive,reactivate}d." when
+    Archive/Reactivate could not locate the note to transition, or Archive's
+    Operational Integrity refused it; nothing for a refusal without one of
+    these reasons (`missing`, `wrong_context`), which keeps its original
+    message.
+
+    `operational_dependents` reads the dependents off `result.dependents` --
+    gathered once, by the execution layer, while locating the note by title
+    (#161) -- never a second, independent lookup here."""
+    if result.reason == "operational_dependents":
+        names = ", ".join(f"'{d['title']}'" for d in result.dependents)
+        return (
+            f" It is still required operationally by {names}. Archive does not "
+            f"resolve this: unlink it, or archive the object(s) requiring it, first."
+        )
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then {operation} again."
         )
     if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
         return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
@@ -602,21 +628,13 @@ def main(argv: list[str] | None = None) -> int:
         ):
             operation, _, kind = args.command.partition("-")
             spec = spec_by_kind[kind]
+            label = kind.replace("-", " ").title()
             execute = execute_archive if operation == "archive" else execute_reactivate
 
             request = ArchiveRequest(title=args.title, actor=actor)
             result = execute(request, spec=spec)
             if not result.applicable:
-                if result.reason == "operational_dependents":
-                    dependents = read_operational_dependents(args.title, spec)
-                    names = ", ".join(f"'{d['title']}'" for d in dependents)
-                    print(
-                        f"Not applicable: '{args.title}' cannot be archived. It is still required "
-                        f"operationally by {names}. Archive does not resolve this: unlink it, or "
-                        f"archive the object(s) requiring it, first."
-                    )
-                else:
-                    print(f"Not applicable: '{args.title}' cannot be {operation}d.")
+                print(f"Not applicable: '{args.title}' cannot be {operation}d.{_archive_reason(result, label, operation)}")
                 return 1
             print(f"{operation.capitalize()}d '{result.project.title}' -> {result.path}")
             return 0
