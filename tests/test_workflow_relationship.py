@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from ohtli.execution import specs
 from ohtli.workflow import processing
 
@@ -208,6 +210,26 @@ def test_only_meeting_supports_project_is_bounded_to_one_target():
         ("Resource", "Project"): None,
         ("Meeting", "Project"): 1,
     }
+
+
+def test_an_end_is_located_when_exactly_one_note_carries_the_title():
+    assert processing.is_relationship_end_located(matches=1)
+
+
+def test_an_end_is_not_located_when_no_note_carries_the_title():
+    """The title exists only in name: a hand-made file, or a note of a
+    different type. Nothing of the right kind to relate/unrelate."""
+    assert not processing.is_relationship_end_located(matches=0)
+
+
+def test_an_end_is_not_located_when_more_than_one_note_carries_the_title():
+    """Ambiguous: Relate/Unrelate must not guess which note is either end."""
+    assert not processing.is_relationship_end_located(matches=2)
+
+
+def test_matches_is_required_to_locate_an_end():
+    with pytest.raises(TypeError):
+        processing.is_relationship_end_located()
 
 
 def test_a_bounded_supports_relationship_refuses_a_second_target():

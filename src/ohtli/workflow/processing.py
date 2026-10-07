@@ -279,6 +279,22 @@ def is_update_applicable(*, matches: int) -> bool:
     return matches == 1
 
 
+def is_relationship_end_located(*, matches: int) -> bool:
+    """An end of a Relate/Unrelate -- its source, or a named target -- is
+    located only when exactly one note of its type carries the title.
+
+    Not `is_update_applicable`: "update" is the wrong concept for either end
+    of a relationship. Not `is_target_located` (the name #160/#161 use in
+    their own workflow modules): in relationship vocabulary "target" already
+    means the relationship's target specifically, and this predicate also
+    locates the source.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1
+
+
 def transform(raw_text: str, domain_factory: Callable[..., T] = Project) -> T:
     """The Processing transformation: interpret an existing Inbox entry
     as a new Domain Object.
