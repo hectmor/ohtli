@@ -167,6 +167,18 @@ def test_a_differently_cased_argument_is_not_applicable(vault):
     assert upper.applicable is True and upper.area_title == "Health"
 
 
+def test_a_non_ascii_area_title_gets_a_transliterated_dashboard_name(tmp_path):
+    """#157: `write_area_dashboard` names the generated file from the
+    Area's title via `slugify`; a non-ASCII title now gets the
+    transliterated name, not the old, lossy one."""
+    _capture(tmp_path, AREA, "Salud física")
+
+    written = _write(tmp_path, "Salud física")
+
+    assert written.applicable is True
+    assert written.path.name == "salud-fisica-dashboard.md"
+
+
 def test_a_project_note_without_a_context_field_counts_as_operational(vault):
     """A pre-Phase-13 note has no `context`; nothing marked it historical."""
     note = vault / "project" / "alpha.md"

@@ -231,6 +231,16 @@ def test_a_title_that_merely_contains_a_reserved_word_is_fine(spec, tmp_path):
     assert result.applicable is True and result.reason is None
 
 
+@SPECS
+@pytest.mark.parametrize("title", ["Índex", "Réadme"])
+def test_an_accented_reserved_slug_is_still_refused(spec, tmp_path, title):
+    """#157: the accent is dropped by `slugify`, so this now also collides
+    with the reserved slug, the same way it already collided on case."""
+    result = _capture(spec, title, tmp_path)
+
+    assert (result.applicable, result.reason) == (False, "reserved_name")
+
+
 # ---- a successful capture is unchanged ----------------------------------------------
 
 
@@ -241,6 +251,35 @@ def test_a_free_path_still_creates_the_note_and_the_event(spec, tmp_path):
     assert result.applicable is True and result.reason is None
     assert result.path.exists()
     assert len(_log(tmp_path).splitlines()) == 1
+
+
+@SPECS
+def test_capturing_a_non_ascii_title_writes_the_transliterated_file_name(spec, tmp_path):
+    """#157: "Café" is captured at `cafe.md`, not the old, lossy `caf.md`."""
+    result = _capture(spec, "Café", tmp_path)
+
+    assert result.applicable is True and result.reason is None
+    assert result.path.name == "cafe.md"
+    assert result.path.exists()
+    from ohtli.vault_io.markdown import inspect_target as _inspect
+
+    assert _inspect(result.path)["title"] == "Café"
+
+
+@SPECS
+def test_titles_differing_only_by_accents_are_refused_as_same_file_name(spec, tmp_path):
+    """#157: "Año" and "Ano" are different Spanish words but now share a
+    slug (both "ano") -- the same kind of collision `slugify` already
+    allowed for case ("Foo Bar" vs "foo-bar"). The second is refused, the
+    first is never overwritten."""
+    first = _capture(spec, "Año", tmp_path)
+    before, log = _snapshot(tmp_path), _log(tmp_path)
+
+    result = _capture(spec, "Ano", tmp_path)
+
+    _assert_untouched_refusal(result, tmp_path, before, log, "same_file_name")
+    assert result.blocked_path == first.path
+    assert result.occupant_title == "Año"
 
 
 # ---- the race-free backstop: exclusive create ---------------------------------------

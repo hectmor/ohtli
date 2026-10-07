@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import unicodedata
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -69,8 +70,33 @@ def vault_root(root: Path):
 
 
 def slugify(title: str) -> str:
-    slug = title.strip().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+    """A note's file name stem: ASCII lowercase letters, digits and single
+    hyphens (#157).
+
+    Accented Latin letters lose their accents ("Café" -> "cafe"). NFKD
+    splits each one into a base letter plus combining marks (category
+    "Mn"), which are then dropped; NFKD also folds compatibility forms
+    (ligatures, full-width letters, math-styled letters, superscripts).
+    Casefold runs AFTER normalization, not before: some characters have no
+    lowercase mapping of their own and only become ordinary letters once
+    normalized (a math-bold capital, for instance) -- casefolding first
+    would lose them instead of folding them to ASCII.
+
+    A title with no Latin letters or digits left after this (Cyrillic,
+    Greek, CJK, Arabic, emoji, symbols only) still falls back to
+    "untitled", unchanged from before: one such note per folder, the next
+    refused as `same_file_name`, never silently overwritten.
+
+    Every pure-ASCII title slugifies identically to before: NFKD leaves
+    ASCII untouched, ASCII has no combining marks, and `casefold()` equals
+    `lower()` on ASCII. Changing this function changes only the file name
+    chosen for a NEW note -- an existing note is always located by its
+    stored title (`find_notes_titled`), never by recomputing its slug
+    (#156, #160-#163).
+    """
+    decomposed = unicodedata.normalize("NFKD", title.strip())
+    unaccented = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    slug = re.sub(r"[^a-z0-9]+", "-", unaccented.casefold()).strip("-")
     return slug or "untitled"
 
 
@@ -90,9 +116,16 @@ def area_file_path(title: str, base_dir: Path | None = None) -> Path:
 def area_dashboard_file_path(area_title: str, base_dir: Path | None = None) -> Path:
     """Where an Area's generated dashboard lives: `<area-slug>-dashboard.md`.
 
-    Built from the Area's own slug plus a fixed suffix (not by slugifying
-    "<title> Dashboard"), so the file name always shares the Area note's stem,
-    even for a title that slugifies to nothing (`untitled`).
+    Built from `area_title`'s own slug plus a fixed suffix (not by
+    slugifying "<title> Dashboard"), so a title that slugifies to nothing
+    still gets `untitled-dashboard.md`, not a bare suffix.
+
+    This is NOT guaranteed to share the Area note's actual file stem: the
+    Area may have been renamed since it was captured, or (before #157)
+    captured under a title whose slug has since changed shape. The
+    dashboard is regenerated from `area_title` as given, and is a derived,
+    disposable artifact (`write_generated_file`'s marker check), not a
+    second identity for the Area.
     """
     base = base_dir if base_dir is not None else AREA_DASHBOARDS_DIR
     return base / f"{slugify(area_title)}-dashboard.md"
