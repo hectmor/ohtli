@@ -156,13 +156,15 @@ def test_links_are_the_folder_qualified_display_links_of_the_existing_helper(vau
     assert "- [[area/health|Health]]" in text.splitlines()
 
 
-def test_the_areas_title_comes_from_its_note_not_from_the_argument(vault):
+def test_a_differently_cased_argument_is_not_applicable(vault):
+    """Located by exact title, not by the slug both spellings happen to
+    share (#163) -- the same tolerance that let a decoy sitting at the
+    real Area's slug be read instead of it."""
     lower = _read(vault, "health")
     upper = _read(vault, "Health")
 
-    assert lower.area_title == "Health"
-    assert lower.markdown == upper.markdown
-    assert lower.markdown.splitlines()[2] == "# Health: Area Dashboard"
+    assert lower.applicable is False
+    assert upper.applicable is True and upper.area_title == "Health"
 
 
 def test_a_project_note_without_a_context_field_counts_as_operational(vault):

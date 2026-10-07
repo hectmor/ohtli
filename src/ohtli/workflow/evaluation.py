@@ -32,3 +32,19 @@ def is_applicable(
     represent — Act is real-world work, performed outside this code.
     """
     return current_context == OPERATIONAL and result in allowed_results
+
+
+def is_target_located(*, matches: int) -> bool:
+    """The note to evaluate is located only when exactly one note of its
+    type carries the title.
+
+    Evaluate's Event is permanent (#163): misattributing it to a decoy
+    sitting at a renamed note's old slug would be a lasting wrong write,
+    not merely a stale read. Zero matches means the title exists only in
+    name; more than one is ambiguous. Not imported from `archive.py`/
+    `knowledge.py`/`processing.py` — workflows never call each other.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1

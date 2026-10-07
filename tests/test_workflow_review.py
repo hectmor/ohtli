@@ -1,5 +1,7 @@
+import pytest
+
 from ohtli.event.event import Event
-from ohtli.workflow.review import ReviewConclusion, assess, observe
+from ohtli.workflow.review import ReviewConclusion, assess, is_target_located, observe
 
 
 def _event(**overrides):
@@ -63,3 +65,20 @@ def test_assess_defaults_to_no_attention_required():
     events = [_event(event_type="Project Progress Observed")]
     result = assess({"status": "active"}, events)
     assert result.conclusion == ReviewConclusion.NO_ATTENTION_REQUIRED
+
+
+def test_the_target_is_located_when_exactly_one_note_carries_the_title():
+    assert is_target_located(matches=1)
+
+
+def test_the_target_is_not_located_when_no_note_carries_the_title():
+    assert not is_target_located(matches=0)
+
+
+def test_the_target_is_not_located_when_more_than_one_note_carries_the_title():
+    assert not is_target_located(matches=2)
+
+
+def test_matches_is_required_to_locate_the_target():
+    with pytest.raises(TypeError):
+        is_target_located()
