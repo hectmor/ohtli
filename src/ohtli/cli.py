@@ -165,6 +165,40 @@ def _relationship_reason(result, *, source_label: str, target_label: str, operat
     return ""
 
 
+def _evaluation_reason(result, label: str) -> str:
+    """The sentence that follows "cannot be evaluated as '<result>'." when
+    Evaluate could not locate the note; nothing for a refusal without a
+    location reason (wrong context, or a result this type cannot produce),
+    which keeps its original message.
+
+    Evaluate's Event is permanent (#163), so this gets the same treatment
+    as the write-path helpers (`_archive_reason`/`_relationship_reason`),
+    not `read_operational_dependents`'s bare `applicable` (#161)."""
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then evaluate again."
+        )
+    if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
+        return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    return ""
+
+
+def _review_reason(result, label: str) -> str:
+    """Same shape as `_evaluation_reason`, for Review; kept separate (own
+    wording), per the precedent every workflow's CLI helper is its own."""
+    if result.reason == "ambiguous_title":
+        names = ", ".join(p.name for p in result.candidates)
+        return (
+            f" {len(result.candidates)} {label} notes are titled '{result.search_title}' "
+            f"({names}); rename all but one, then review again."
+        )
+    if result.reason == "not_an_ohtli_note" and result.blocked_path is not None:
+        return f" {result.blocked_path} is titled '{result.search_title}' but is not an Ohtli {label} note; it was left untouched."
+    return ""
+
+
 def main(argv: list[str] | None = None) -> int:
     spec_by_kind = {
         "project": PROJECT,
@@ -687,7 +721,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = execute_evaluation(request, spec=spec)
             if not result.applicable:
-                print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.")
+                reason = _evaluation_reason(result, spec.display_name)
+                print(f"Not applicable: '{args.title}' cannot be evaluated as '{args.result}'.{reason}")
                 return 1
             print(f"Evaluated '{result.project.title}' as '{args.result}' -> {result.event.event_type}")
             return 0
@@ -704,7 +739,10 @@ def main(argv: list[str] | None = None) -> int:
             request = ReviewRequest(title=args.title, actor=actor, since=args.since)
             result = execute_review(request, spec=spec)
             if not result.applicable:
-                print(f"Not applicable: '{args.title}' does not exist.")
+                if result.reason in ("ambiguous_title", "not_an_ohtli_note"):
+                    print(f"Not applicable: '{args.title}' cannot be reviewed.{_review_reason(result, spec.display_name)}")
+                else:
+                    print(f"Not applicable: '{args.title}' does not exist.")
                 return 1
             print(
                 f"Reviewed '{result.project.title}': {result.assessment.conclusion.value} "

@@ -81,3 +81,21 @@ def assess(properties: dict[str, Any], evaluation_events: list[Event]) -> Review
         conclusion=ReviewConclusion.NO_ATTENTION_REQUIRED,
         basis=(f"most recent evaluation was '{latest.event_type}'",),
     )
+
+
+def is_target_located(*, matches: int) -> bool:
+    """The note to review is located only when exactly one note of its
+    type carries the title.
+
+    Review's Event is permanent (#163): misattributing it to a decoy
+    sitting at a renamed note's old slug would be a lasting wrong write,
+    not merely a stale read -- and `observe` would filter by the decoy's
+    id, silently ignoring the real note's own history. Zero matches means
+    the title exists only in name; more than one is ambiguous. Not
+    imported from `archive.py`/`knowledge.py`/`processing.py`/
+    `evaluation.py` -- workflows never call each other.
+
+    Pure: `matches` (how many Ohtli notes of this type carry the title) is
+    gathered by Execution.
+    """
+    return matches == 1

@@ -673,6 +673,15 @@ class EvaluationResult:
     project: Project | Area | None
     path: Path | None
     event: Event | None
+    # Only set when the note to evaluate could not be located (#163):
+    # "missing", "ambiguous_title" (`candidates`) or "not_an_ohtli_note"
+    # (`blocked_path`, when one can be identified). `search_title` carries
+    # the title. The workflow's own refusal (wrong context, or a result
+    # this type's `allowed_results` excludes) keeps `reason=None`, as before.
+    reason: str | None = None
+    blocked_path: Path | None = None
+    candidates: tuple[Path, ...] = ()
+    search_title: str | None = None
 
 
 def execute_evaluation(
@@ -684,6 +693,14 @@ def execute_evaluation(
 ) -> EvaluationResult:
     """Execute the Evaluate operation: record the actual operational
     result of work already performed on an actionable Project or Area.
+
+    The target is located by TITLE, not by the slug the title happens to
+    map to (#163, the same flaw #156/#160/#161/#162 had): unlike a plain
+    read, Evaluate's Event is permanent, so a decoy sitting at a renamed
+    note's old slug would be misattributed a lasting wrong write, not
+    merely a stale read -- which is why this gets the write-path treatment
+    (location taxonomy, pre-write revalidation) despite touching no
+    representation file itself.
 
     Evaluate is the only one of Execution's three conceptual
     operations (Select, Act, Evaluate) this function represents —
@@ -699,9 +716,52 @@ def execute_evaluation(
     Lifecycle Separation) — only the emitted Event records what
     happened.
     """
-    path = spec.file_path(request.title, base_dir=base_dir)
-    if not path.exists():
-        return EvaluationResult(request=request, applicable=False, project=None, path=None, event=None)
+    directory = spec.file_path(request.title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, request.title, spec.note_type)
+    if not evaluation_workflow.is_target_located(matches=len(matches)):
+        if len(matches) > 1:
+            return EvaluationResult(
+                request=request,
+                applicable=False,
+                project=None,
+                path=None,
+                event=None,
+                reason="ambiguous_title",
+                candidates=tuple(matches),
+                search_title=request.title,
+            )
+        blocked_path = find_any_note_titled(directory, request.title)
+        return EvaluationResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note" if blocked_path is not None else "missing",
+            blocked_path=blocked_path,
+            search_title=request.title,
+        )
+    path = matches[0]
+
+    # Revalidated right before the Event is emitted: closes the gap between
+    # locating the note above and recording what it says below.
+    occupant = inspect_target(path)
+    if (
+        occupant is None
+        or occupant["kind"] != "note"
+        or occupant["note_type"] != spec.note_type
+        or occupant["title"] != request.title
+    ):
+        return EvaluationResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            reason="not_an_ohtli_note",
+            blocked_path=path,
+            search_title=request.title,
+        )
 
     representation = spec.read(path)
     current_context = representation["properties"].get("context")
@@ -747,6 +807,14 @@ class ReviewResult:
     path: Path | None
     event: Event | None
     assessment: ReviewAssessment | None
+    # Only set when the note to review could not be located (#163):
+    # "missing", "ambiguous_title" (`candidates`) or "not_an_ohtli_note"
+    # (`blocked_path`, when one can be identified). `search_title` carries
+    # the title.
+    reason: str | None = None
+    blocked_path: Path | None = None
+    candidates: tuple[Path, ...] = ()
+    search_title: str | None = None
 
 
 def execute_review(
@@ -757,6 +825,15 @@ def execute_review(
     events_dir: Path | None = None,
 ) -> ReviewResult:
     """Execute the Review workflow for a single named Project or Area.
+
+    The target is located by TITLE, not by the slug the title happens to
+    map to (#163, the same flaw #156/#160/#161/#162 had): unlike a plain
+    read, Review's Event is permanent, and `observe` filters the Event log
+    by the located note's own id -- a decoy sitting at a renamed note's old
+    slug would not just be misattributed a wrong Event, it would also make
+    the real note's own evaluation history invisible to this Review. Gets
+    the write-path treatment (location taxonomy, pre-write revalidation)
+    for the same reason Evaluate does.
 
     Unlike Evaluate, applicability requires only that the target
     exists -- archived and completed objects remain reviewable
@@ -769,10 +846,54 @@ def execute_review(
     bounds which Events are considered relevant to this Review's
     temporal context.
     """
-    path = spec.file_path(request.title, base_dir=base_dir)
-    if not path.exists():
+    directory = spec.file_path(request.title, base_dir=base_dir).parent
+    matches = find_notes_titled(directory, request.title, spec.note_type)
+    if not review_workflow.is_target_located(matches=len(matches)):
+        if len(matches) > 1:
+            return ReviewResult(
+                request=request,
+                applicable=False,
+                project=None,
+                path=None,
+                event=None,
+                assessment=None,
+                reason="ambiguous_title",
+                candidates=tuple(matches),
+                search_title=request.title,
+            )
+        blocked_path = find_any_note_titled(directory, request.title)
         return ReviewResult(
-            request=request, applicable=False, project=None, path=None, event=None, assessment=None
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            assessment=None,
+            reason="not_an_ohtli_note" if blocked_path is not None else "missing",
+            blocked_path=blocked_path,
+            search_title=request.title,
+        )
+    path = matches[0]
+
+    # Revalidated right before the Event is emitted: closes the gap between
+    # locating the note above and recording what it says below.
+    occupant = inspect_target(path)
+    if (
+        occupant is None
+        or occupant["kind"] != "note"
+        or occupant["note_type"] != spec.note_type
+        or occupant["title"] != request.title
+    ):
+        return ReviewResult(
+            request=request,
+            applicable=False,
+            project=None,
+            path=None,
+            event=None,
+            assessment=None,
+            reason="not_an_ohtli_note",
+            blocked_path=path,
+            search_title=request.title,
         )
 
     representation = spec.read(path)
@@ -1275,6 +1396,34 @@ class ContainedProjectsResult:
     projects: tuple[dict[str, Any], ...]
 
 
+def _locate_area(area_title: str, *, area_base_dir: Path | None) -> Path | None:
+    """The Area is located by TITLE, not by the slug the title happens to
+    map to (#163, the same flaw #156/#160/#161/#162 had). `None` unless
+    exactly one Area carries the title.
+
+    A bare `Path | None` is all `read_contained_projects`/
+    `read_area_dashboard` need: neither writes anything or emits an Event,
+    so there is no "it was left untouched" story to tell and no reason
+    taxonomy -- the same precedent `read_operational_dependents` (#161)
+    set for a read-only lookup.
+    """
+    directory = AREA.file_path(area_title, base_dir=area_base_dir).parent
+    matches = find_notes_titled(directory, area_title, AREA.note_type)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _projects_contained_by(
+    area_representation: dict[str, Any], *, project_base_dir: Path | None
+) -> tuple[dict[str, Any], ...]:
+    """The Projects `Area contains Project` derives, for an already-located
+    Area (#163): its own `id`, never a second, separate lookup of the Area."""
+    derived = processing.derived_relationship_for_pair("Area", "Project")
+    area_id = area_representation["properties"]["id"]
+    return tuple(
+        list_projects_linking_to(area_id, derived.via.relationship_type, base_dir=project_base_dir)
+    )
+
+
 def read_contained_projects(
     area_title: str,
     *,
@@ -1290,19 +1439,18 @@ def read_contained_projects(
     targets this Area. With a single source of truth it can neither go stale
     nor contradict the Project side.
 
-    Applicable only when the Area exists. Archived (historical) Projects are
+    Applicable only when the Area exists, located by TITLE, not by the slug
+    the title happens to map to (#163). Archived (historical) Projects are
     included: Archive is non-cascading and their `belongs to` link persists.
     """
-    area_path = AREA.file_path(area_title, base_dir=area_base_dir)
-    if not area_path.exists():
+    area_path = _locate_area(area_title, area_base_dir=area_base_dir)
+    if area_path is None:
         return ContainedProjectsResult(applicable=False, projects=())
 
-    derived = processing.derived_relationship_for_pair("Area", "Project")
-    area_id = AREA.read(area_path)["properties"]["id"]
-    projects = list_projects_linking_to(
-        area_id, derived.via.relationship_type, base_dir=project_base_dir
+    area = AREA.read(area_path)
+    return ContainedProjectsResult(
+        applicable=True, projects=_projects_contained_by(area, project_base_dir=project_base_dir)
     )
-    return ContainedProjectsResult(applicable=True, projects=tuple(projects))
 
 
 @dataclass(frozen=True)
@@ -1322,23 +1470,22 @@ def read_area_dashboard(
     Projects that belong to it.
 
     Not an `execute_*` operation: no actor, no request, no event, and nothing
-    is written, because a projection is not a change to any Domain Object (the
-    same precedent as `read_contained_projects`, which this composes). The
+    is written, because a projection is not a change to any Domain Object. The
     notes stay the single source of truth; this only renders what they say now.
 
-    Applicable only when the Area exists. The Area's title comes from its note,
-    not from `area_title`, so the rendering is identical however the caller
-    spelled it. Archived Projects are included, in their own section.
+    Applicable only when the Area exists, located ONCE by TITLE, not by the
+    slug the title happens to map to (#163) -- never a second, independent
+    lookup of the Area the way the old code called `read_contained_projects`
+    and then re-located the Area itself. Archived Projects are included, in
+    their own section.
     """
-    contained = read_contained_projects(
-        area_title, area_base_dir=area_base_dir, project_base_dir=project_base_dir
-    )
-    if not contained.applicable:
+    area_path = _locate_area(area_title, area_base_dir=area_base_dir)
+    if area_path is None:
         return AreaDashboardResult(applicable=False, markdown=None, area_title=None)
 
-    area_path = AREA.file_path(area_title, base_dir=area_base_dir)
     area = AREA.read(area_path)
     title = area["title"]
+    projects = _projects_contained_by(area, project_base_dir=project_base_dir)
     markdown = area_dashboard.render(
         area_title=title,
         area_link=_link_display(area_path, title),
@@ -1349,7 +1496,7 @@ def read_area_dashboard(
                 "status": project["status"],
                 "context": project["context"],
             }
-            for project in contained.projects
+            for project in projects
         ],
     )
     return AreaDashboardResult(applicable=True, markdown=markdown, area_title=title)

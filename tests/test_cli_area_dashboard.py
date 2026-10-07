@@ -91,8 +91,13 @@ def test_the_default_mode_writes_nothing(capsys, vault):
     assert not (vault / "dashboards").exists()
 
 
-def test_the_argument_may_be_spelled_differently_from_the_areas_title(capsys, vault):
-    assert _run(capsys, "area-dashboard", "health") == _run(capsys, "area-dashboard", "Health")
+def test_a_differently_cased_argument_is_not_applicable(capsys, vault):
+    """Located by exact title, not by the slug both spellings happen to
+    share (#163)."""
+    code, out = _run(capsys, "area-dashboard", "health")
+
+    assert code == 1
+    assert out == "Not applicable: no Area titled 'health'.\n"
 
 
 def test_the_projects_are_split_into_operational_and_historical(capsys, vault):
@@ -163,12 +168,6 @@ def test_after_the_vault_changes_write_regenerates_and_says_updated(capsys, vaul
     assert code == 0
     assert out == f"Updated Area Dashboard for 'Health' -> {_dashboard(vault)}\n"
     assert "[[projects/alpha|Alpha]]" in _dashboard(vault).read_text(encoding="utf-8").split("### Historical")[1]
-
-
-def test_the_status_line_uses_the_areas_real_title_not_the_argument(capsys, vault):
-    code, out = _run(capsys, "area-dashboard", "health", "--write")
-
-    assert code == 0 and out.startswith("Wrote Area Dashboard for 'Health' ->")
 
 
 def test_a_hand_made_file_at_the_dashboards_path_is_refused_and_untouched(capsys, vault):
